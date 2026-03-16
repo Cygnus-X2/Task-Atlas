@@ -10,7 +10,7 @@ import sqlite3
 import time
 import urllib.error
 import urllib.request
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.utils import formatdate
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -26,6 +26,8 @@ DEFAULT_TEAMS = [
     "Product",
     "Projects",
 ]
+
+UTC = timezone.utc
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
@@ -897,12 +899,27 @@ class TodoStore:
             return None
 
         summary = self._decode_ics_text(event.get("SUMMARY", "Busy"))
+        blocking = self._is_calendar_event_blocking(event)
         return {
             "summary": summary,
             "start": start_dt.isoformat(timespec="minutes"),
             "end": end_dt.isoformat(timespec="minutes"),
             "all_day": "true" if all_day else "false",
+            "blocking": "true" if blocking else "false",
         }
+
+    def _is_calendar_event_blocking(self, event: dict[str, str]) -> bool:
+        transparency = self._decode_ics_text(event.get("TRANSP", "")).strip().upper()
+        busy_status = self._decode_ics_text(event.get("X-MICROSOFT-CDO-BUSYSTATUS", "")).strip().upper()
+        intended_status = self._decode_ics_text(event.get("X-MICROSOFT-CDO-INTENDEDSTATUS", "")).strip().upper()
+
+        if transparency == "TRANSPARENT":
+            return False
+        if busy_status == "FREE":
+            return False
+        if intended_status == "FREE":
+            return False
+        return True
 
     def _parse_ics_datetime(
         self,
