@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.nik.todo-board.open-browser</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/open</string>
+    <string>http://todo.nik:8000</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>LimitLoadToSessionType</key>
+  <array>
+    <string>Aqua</string>
+  </array>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/todo-board-open.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/todo-board-open.err.log</string>
+</dict>
+</plist>
