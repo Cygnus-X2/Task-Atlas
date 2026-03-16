@@ -1,88 +1,165 @@
-# Planner Improvement TODO
+# Task Atlas TODO
 
-## Prioritization Model
+## Product Direction
 
-- [ ] Decide on the core planning model: `Urgent + Impact + Time` vs `Urgent + Important + Time`
-- [ ] Replace the current smart ranking with a weekly-planning ranking, not just a next-task ranking
-- [ ] Add derived buckets such as `Must`, `Strategic`, `Quick win`, and `Clarify`
-- [ ] Make the smart mode explainable: show why a task is ranked high
-- [ ] Tune the smart sort so short tasks are a tie-breaker, not the dominant signal
+Task Atlas should not become "just another priority table."
 
-## Weekly Planning
+The real job to support is:
 
-- [ ] Add a dedicated weekly planning mode instead of overloading the normal table sort
-- [ ] Surface a small "this week" shortlist or focus area
-- [ ] Let the user identify 1-3 strategic tasks for the week
-- [ ] Add a way to separate reactive work from strategic work
-- [ ] Add a "needs clarification" bucket so vague tasks stop polluting execution planning
-- [ ] Translate the weekly todo list into actual calendar blocks
-- [ ] Add calendar integration so weekly plans can be mapped to time
-- [ ] Add a "planned this week" vs "scheduled in calendar" distinction
+- keep track of multiple business areas without losing visibility
+- separate operational work from change work
+- protect weekly focus instead of reacting to whatever is loudest
+- connect tactical tasks to larger goals
+- schedule work against real calendar constraints
+- keep task completion and execution truth inside the planner
 
-## Goal Breakdown
+The planner should be:
 
-- [ ] Add lightweight goal-to-task breakdown so weekly work ties back to larger outcomes
-- [ ] Support parent goals with child tasks or milestones
-- [ ] Show whether a task is strategic because it supports a current goal
-- [ ] Add a weekly planning view that starts from goals and breaks down into executable tasks
-- [ ] Make it easy to convert a goal into several concrete next actions
+- simple enough to maintain daily
+- structured enough to reduce clutter
+- opinionated enough to create focus
 
-## Task Metadata
+## Core Principles
 
-- [ ] Revisit whether `Important` should become `Impact`
-- [ ] Keep `Urgent` only if it remains genuinely useful for execution pressure
-- [ ] Decide whether `Time` should stay effort-based (`<5m`, `15m`, `30m`, `1h`, `2h+`)
-- [ ] Add optional derived labels rather than adding too many manual fields
-- [ ] Avoid reintroducing a manual `Prio` field
-- [ ] Add an impact/effort matrix view or derived classification
-- [ ] Decide whether `Impact` should replace `Important`
+- Do not rely on vague manual priority fields like `Urgent` and `Important`
+- Do not force one prioritization model to do every job
+- Keep explicit fields small in number and high in signal
+- Derive views like `Focus`, `Quick win`, and `Needs clarity` from structured data
+- Make weekly planning a first-class workflow, not just a table sort
+- Keep the planner as source of truth for task state and completion
+- Treat the calendar as a planning constraint first, not as the task system
 
-## Activity Tracking
+## Recommended Core Model
 
-- [ ] Track when work actually started, not only when the task was created
-- [ ] Track last touched / last updated dates for better review
-- [ ] Add simple activity history for status changes and major edits
-- [ ] Add a weekly review view showing what moved, what stalled, and what was completed
-- [ ] Distinguish between planned work and actual work done
+Replace the current emphasis on `Urgent` and `Important` with a stronger structure:
 
-## UX And Navigation
+- `Task`
+- `Status`
+- `Area`
+- `Mode`
+- `Owner`
+- `Effort`
+- `Due`
+- `Goal`
+- `Notes`
 
-- [ ] Continue improving keyboard-first editing so the board feels spreadsheet-like
-- [ ] Add predictable "move to next cell" behavior after committing an edit
-- [ ] Add a visible empty-state row when there are no tasks
-- [ ] Add clearer save/error feedback when API writes fail
-- [ ] Improve mobile behavior for editing dropdown-heavy rows
+Field intent:
 
-## Structure And Views
+- `Area`: where the work belongs, for example `Sales`, `Hiring`, `Finance`, `KPIs`, `Product`, `BU`
+- `Mode`: `Run` or `Change`
+- `Owner`: `Me` or `Delegate`
+- `Effort`: `<5m`, `15m`, `30m`, `1h`, `2h+`
+- `Due`: only when there is a real date
+- `Goal`: optional strategic anchor
 
-- [ ] Consider a compact planning sidebar or right-side summary panel
-- [ ] Add a quick-win view
-- [ ] Add a strategic view
-- [ ] Add a "no info" / underspecified view
-- [ ] Consider a separate weekly review screen instead of putting every workflow into one table
-- [ ] Add an impact/effort matrix view for portfolio-style prioritization
-- [ ] Add a calendar-linked weekly planning view
+Why this is the better balance:
 
-## Reliability
+- `Area` keeps the portfolio visible
+- `Mode` separates operational load from strategic change
+- `Owner` makes delegation explicit instead of burying it inside priority logic
+- `Effort` supports execution and scheduling
+- `Goal` gives strategic context without turning every task into abstract "importance"
 
+## Views To Derive
+
+These should mostly be derived views, not extra manual fields:
+
+- `Focus`
+- `This week`
+- `Quick wins`
+- `Strategic`
+- `Delegatable`
+- `Needs clarity`
+- `By area`
+- `By goal`
+- `Weekly review`
+
+Design rule:
+
+- explicit fields create structure
+- derived views create prioritization
+
+## Roadmap
+
+### Phase 1: Fix The Model
+
+- [ ] Remove or deprecate `Urgent` and `Important`
+- [ ] Introduce `Area`
+- [ ] Introduce `Mode` with `Run` / `Change`
+- [ ] Introduce `Owner` with `Me` / `Delegate`
+- [ ] Keep `Effort` as effort buckets
+- [ ] Add optional `Goal` linkage
+- [ ] Keep `Due`, `Status`, `Created`, and `Completed`
+- [ ] Avoid reintroducing a generic manual `Prio` field
+
+### Phase 2: Reduce Clutter
+
+- [ ] Add a `Focus` view that shows a small, intentional set of work instead of the full backlog
+- [ ] Add a `Needs clarity` view so underspecified tasks stop polluting planning
+- [ ] Add a `Delegatable` view so handoff candidates are obvious
+- [ ] Add a `Strategic` view based on `Mode = Change` and/or linked goals
+- [ ] Add a `Quick wins` view based on short effort
+- [ ] Let the user move between `Area`, `Goal`, and `Focus` views easily
+
+### Phase 3: Weekly Planning
+
+- [ ] Make weekly planning a dedicated mode, not just sorting
+- [ ] Surface a weekly shortlist or commit list
+- [ ] Encourage a deliberate mix of `Run` and `Change` work
+- [ ] Let the user mark 1-3 weekly strategic commitments
+- [ ] Distinguish `planned this week` from `scheduled on calendar`
+- [ ] Build a weekly review that shows what moved, stalled, or was finished
+
+### Phase 4: Goals And Breakdown
+
+- [ ] Add lightweight goals as first-class objects
+- [ ] Let tasks link to a goal
+- [ ] Support goal-to-task breakdown
+- [ ] Show why a task matters by showing its goal context
+- [ ] Add a goal view that starts with outcomes and drills into tasks
+- [ ] Make it easy to create concrete next actions from a goal
+
+### Phase 5: Calendar-Aware Planning
+
+- [ ] Add a right-side calendar planning panel
+- [ ] Subscribe to Outlook calendar as read-only input
+- [ ] Show existing Outlook events as blockers/constraints
+- [ ] Let the planner project task blocks into free gaps
+- [ ] Keep Task Atlas as source of truth for task completion
+- [ ] Only consider write-back/sync to Outlook after read-only planning works well
+
+### Phase 6: Activity And Review
+
+- [ ] Track when work actually started
+- [ ] Track last touched / updated timestamps
+- [ ] Add lightweight activity history for important changes
+- [ ] Add a "completed today / this week" review flow
+- [ ] Distinguish planned work from actual work done
+
+### Phase 7: UX And Reliability
+
+- [ ] Continue improving keyboard-first editing
+- [ ] Add stronger empty-state guidance
+- [ ] Add clearer save and sync failure messaging
 - [ ] Add protection against accidental full empty overwrites
-- [ ] Add a one-click backup/export before destructive bulk updates
-- [ ] Add a restore flow from uploaded CSV without stale browser state overwriting it
-- [ ] Add lightweight audit/history for major state changes
-- [ ] Add tests around empty DB state, import, and team-order persistence
+- [ ] Add one-click backup/export before destructive bulk actions
+- [ ] Add restore safety so stale browser state cannot overwrite imported data
+- [ ] Add tests around empty DB state, imports, completion tracking, and team persistence
 
-## API And Data Model
+## Hard Questions To Keep Honest
 
-- [ ] Decide whether `/api/state` should carry more derived planner metadata
-- [ ] Keep team order persistent and documented in the API contract
-- [ ] Document the current keyboard workflow in the README
-- [ ] Decide whether agent-facing docs should describe ranking semantics too
-- [ ] Add a stable export format for planner state and future migrations
+- [ ] Are `Area` values disciplined enough, or are they becoming a mix of teams, themes, and responsibilities?
+- [ ] Is `Mode = Run / Change` enough, or is some work still too ambiguous?
+- [ ] Is `Owner = Me / Delegate` sufficient, or do we need richer ownership later?
+- [ ] Is `Goal` optional enough to avoid metadata burden?
+- [ ] Does the `Focus` view genuinely reduce clutter, or just hide backlog problems?
+- [ ] Are calendar features supporting planning, or just adding integration complexity?
 
-## Near-Term Recommended Sequence
+## Near-Term Sequence
 
-- [ ] Rework smart sort into a weekly-planning priority model
-- [ ] Add derived labels: `Strategic`, `Quick win`, `Clarify`
-- [ ] Add empty-state + better save/error messaging
-- [ ] Improve post-edit keyboard flow
-- [ ] Add backup/restore safety before bigger planner changes
+- [ ] Rework the data model around `Area`, `Mode`, `Owner`, `Effort`, and `Goal`
+- [ ] Build the first real `Focus` view
+- [ ] Add `Delegatable`, `Strategic`, and `Needs clarity` derived views
+- [ ] Add a weekly planning layer on top of the board
+- [ ] Add goals after the new core model is stable
+- [ ] Add read-only Outlook calendar subscription after weekly planning is working

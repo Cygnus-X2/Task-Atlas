@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Task Atlas Goals</title>
+  <link rel="stylesheet" href="./assets/css/app.css" />
+  <script src="./assets/js/app.js" defer></script>
+</head>
+<body data-view="goals">
+  <header>
+    <div class="header-brand">
+      <h1>Task Atlas</h1>
+      <nav class="header-nav">
+        <a class="nav-link" href="./index.html">Board</a>
+        <a class="nav-link is-active" href="./goals.html">Goals</a>
+        <a class="nav-link" href="./focus-week.html">Focus Week</a>
+      </nav>
+    </div>
+    <div class="header-actions">
+      <button id="btnAddGoal" class="btn-primary" type="button">+ Add goal</button>
+    </div>
+  </header>
+
+  <section class="goals-shell">
+    <div class="goals-toolbar">
+      <div>
+        <h2>Goals</h2>
+        <p class="goals-subtitle">Strategic anchors and the tasks contributing to them.</p>
+      </div>
+      <span id="statsLine" class="stats-line"></span>
+    </div>
+    <div id="goalList" class="goal-grid"></div>
+  </section>
+
+  <div id="toast"></div>
+
+  <div id="goalOverlay" class="overlay">
+    <div class="dialog">
+      <h3>Add new goal</h3>
+      <input id="newGoalInput" placeholder="Goal name..." />
+      <div class="dialog-actions">
+        <button id="btnCancelGoal" class="btn-ghost" type="button">Cancel</button>
+        <button id="btnConfirmGoal" class="btn-primary" type="button">Add</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

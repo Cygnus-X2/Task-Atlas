@@ -124,8 +124,10 @@ Current behavior:
 - source of truth: `data/tasks.db`
 - browser talks to `/api/state`
 - CSV is only for initial seed or manual import/export
-- task fields now use `urgency`, `importance`, and `time_estimate` instead of the old `prio`
-- tasks also carry a read-only `created_at` date shown in the rightmost data column
+- the board model now emphasizes `team` as area, plus `mode`, `owner`, `time_estimate`, and goal objects managed through `/api/state`
+- tasks also carry a commitment-style `priority` field with written-out values: `Must`, `Should`, `Could`, and `Needs refinement`
+- tasks still carry a read-only `created_at` date for API/export/history purposes even though it is no longer shown as a main board column
+- when a task is marked `Done`, the server stores `completed_at` so you can query what was finished on a given day
 
 ## API
 
@@ -139,6 +141,7 @@ Current main endpoint:
 - `HEAD /api/state`
 - `PUT /api/state`
 - `GET /api/tasks`
+- `GET /api/tasks?completed_at=YYYY-MM-DD`
 - `POST /api/tasks`
 - `GET /api/tasks/:id`
 - `PATCH /api/tasks/:id`
@@ -160,6 +163,8 @@ uploads/      imported source files
 Main files:
 
 - [`site/index.html`](/Users/nik/projects/todo-board/site/index.html)
+- [`site/goals.html`](/Users/nik/projects/todo-board/site/goals.html)
+- [`site/focus-week.html`](/Users/nik/projects/todo-board/site/focus-week.html)
 - [`site/niklas-board.html`](/Users/nik/projects/todo-board/site/niklas-board.html)
 - [`site/assets/css/app.css`](/Users/nik/projects/todo-board/site/assets/css/app.css)
 - [`site/assets/js/app.js`](/Users/nik/projects/todo-board/site/assets/js/app.js)

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Task Atlas Focus Week</title>
+  <link rel="stylesheet" href="./assets/css/app.css" />
+  <script src="./assets/js/app.js" defer></script>
+</head>
+<body data-view="week">
+  <header>
+    <div class="header-brand">
+      <h1>Task Atlas</h1>
+      <nav class="header-nav">
+        <a class="nav-link" href="./index.html">Board</a>
+        <a class="nav-link" href="./goals.html">Goals</a>
+        <a class="nav-link is-active" href="./focus-week.html">Focus Week</a>
+      </nav>
+    </div>
+    <div class="header-actions">
+      <button id="btnAddTask" class="btn-ghost" type="button">+ Add task</button>
+      <button id="btnWeekToday" class="btn-ghost" type="button">Today</button>
+    </div>
+  </header>
+
+  <section class="week-shell">
+    <div class="week-feed-bar">
+      <input id="calendarFeedInput" class="week-feed-input" placeholder="Paste Outlook ICS feed URL..." />
+      <button id="btnSaveCalendarFeed" class="btn-primary" type="button">Save feed</button>
+      <span id="calendarFeedStatus" class="stats-line"></span>
+    </div>
+
+    <div class="week-toolbar">
+      <div>
+        <h2>Focus Week</h2>
+        <p class="goals-subtitle">Drag tasks into the calendar to build the week. Feed events block slots visually, but you can still double-book intentionally.</p>
+      </div>
+      <div class="week-nav">
+        <button id="btnWeekPrev" class="btn-ghost" type="button">← Prev</button>
+        <div id="weekLabel" class="week-label"></div>
+        <button id="btnWeekNext" class="btn-ghost" type="button">Next →</button>
+      </div>
+      <span id="statsLine" class="stats-line"></span>
+    </div>
+
+    <div class="week-layout">
+      <aside class="week-sidebar">
+        <div class="week-panel">
+          <div class="week-panel-head">
+            <h3>Backlog</h3>
+            <span id="weekBacklogCount" class="stats-line"></span>
+          </div>
+          <div id="weekBacklog" class="week-backlog"></div>
+        </div>
+      </aside>
+
+      <section class="week-main">
+        <div class="week-panel week-calendar-panel">
+          <div class="week-panel-head">
+            <h3>Calendar</h3>
+            <span class="stats-line">Drag tasks into hourly slots</span>
+          </div>
+          <div id="weekCalendar" class="week-calendar"></div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <div id="toast"></div>
+
+  <div id="weekTaskOverlay" class="overlay">
+    <div class="dialog">
+      <h3>Add task to week</h3>
+      <p id="weekTaskSlotLabel" class="dialog-copy"></p>
+      <input id="weekTaskInput" placeholder="Task name..." />
+      <div class="dialog-actions">
+        <button id="btnCancelWeekTask" class="btn-ghost" type="button">Cancel</button>
+        <button id="btnConfirmWeekTask" class="btn-primary" type="button">Add</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

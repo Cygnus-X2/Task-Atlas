@@ -3,16 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Niklas - Tasks</title>
+  <title>Task Atlas</title>
   <link rel="stylesheet" href="./assets/css/app.css" />
   <script src="./assets/js/app.js" defer></script>
 </head>
-<body>
+<body data-view="board">
   <header>
-    <h1>Niklas - Tasks</h1>
+    <div class="header-brand">
+      <h1>Task Atlas</h1>
+      <nav class="header-nav">
+        <a class="nav-link is-active" href="./index.html">Board</a>
+        <a class="nav-link" href="./goals.html">Goals</a>
+        <a class="nav-link" href="./focus-week.html">Focus Week</a>
+      </nav>
+    </div>
     <div class="header-actions">
       <button id="btnAddTask" class="btn-ghost" type="button">+ Add task</button>
-      <button id="btnAddTeam" class="btn-ghost" type="button">+ Add team</button>
+      <button id="btnAddTeam" class="btn-ghost" type="button">+ Add area</button>
+      <button id="btnAddGoal" class="btn-ghost" type="button">+ Add goal</button>
       <button id="btnImport" class="btn-ghost" type="button">↑ Import CSV</button>
       <input id="csvIn" type="file" accept=".csv" />
       <button id="btnExport" class="btn-primary" type="button">↓ Export CSV</button>
@@ -22,7 +30,7 @@
   <div class="filters">
     <span class="filter-label">Filter</span>
     <select class="f" id="fTeam">
-      <option value="">All teams</option>
+      <option value="">All areas</option>
     </select>
     <select class="f" id="fStatus">
       <option value="">All statuses</option>
@@ -30,18 +38,18 @@
       <option>In development</option>
       <option>Done</option>
     </select>
-    <select class="f" id="fUrgency">
-      <option value="">All urgent</option>
-      <option value="yes">Urgent</option>
-      <option value="no">Not urgent</option>
+    <select class="f" id="fMode">
+      <option value="">All modes</option>
+      <option>Run</option>
+      <option>Change</option>
     </select>
-    <select class="f" id="fImportance">
-      <option value="">All important</option>
-      <option value="yes">Important</option>
-      <option value="no">Not important</option>
+    <select class="f" id="fOwner">
+      <option value="">All owners</option>
+      <option>Me</option>
+      <option>Delegate</option>
     </select>
     <select class="f" id="fTime">
-      <option value="">All time</option>
+      <option value="">All effort</option>
       <option>&lt;5m</option>
       <option>15m</option>
       <option>30m</option>
@@ -49,41 +57,60 @@
       <option>2h+</option>
     </select>
     <input class="search" id="fSearch" placeholder="Search tasks..." />
+    <button id="btnDelegatable" class="btn-ghost push-right" type="button">Delegatable</button>
+    <button id="btnFocus" class="btn-ghost push-right" type="button">Focus</button>
     <button id="btnSmart" class="btn-ghost push-right" type="button">Smart</button>
     <button id="btnDone" class="btn-ghost" type="button">Show done</button>
     <span id="statsLine" class="stats-line"></span>
   </div>
 
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th class="col-drag"></th>
-          <th class="col-name" data-sort="name">Task <span class="sort-arrow" id="sa-name"></span></th>
-          <th class="col-status" data-sort="status">Status <span class="sort-arrow" id="sa-status"></span></th>
-          <th class="col-team" data-sort="team">Team <span class="sort-arrow" id="sa-team"></span></th>
-          <th class="col-important" data-sort="importance">Important <span class="sort-arrow" id="sa-importance"></span></th>
-          <th class="col-urgent" data-sort="urgency">Urgent <span class="sort-arrow" id="sa-urgency"></span></th>
-          <th class="col-time" data-sort="time_estimate">Time <span class="sort-arrow" id="sa-time_estimate"></span></th>
-          <th class="col-deadline" data-sort="deadline">Deadline <span class="sort-arrow" id="sa-deadline"></span></th>
-          <th class="col-notes">Notes</th>
-          <th class="col-created" data-sort="created_at">Created <span class="sort-arrow" id="sa-created_at"></span></th>
-          <th class="col-del"></th>
-        </tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
+  <div class="table-shell">
+    <div id="insertRail" class="insert-rail"></div>
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-drag"></th>
+              <th class="col-name" data-sort="name">Task <span class="sort-arrow" id="sa-name"></span></th>
+              <th class="col-status" data-sort="status">Status <span class="sort-arrow" id="sa-status"></span></th>
+              <th class="col-team" data-sort="team">Area <span class="sort-arrow" id="sa-team"></span></th>
+              <th class="col-mode" data-sort="mode">Mode <span class="sort-arrow" id="sa-mode"></span></th>
+              <th class="col-owner" data-sort="owner">Owner <span class="sort-arrow" id="sa-owner"></span></th>
+              <th class="col-priority" data-sort="priority">Priority <span class="sort-arrow" id="sa-priority"></span></th>
+              <th class="col-time" data-sort="time_estimate">Effort <span class="sort-arrow" id="sa-time_estimate"></span></th>
+              <th class="col-deadline" data-sort="deadline">Due <span class="sort-arrow" id="sa-deadline"></span></th>
+              <th class="col-goal" data-sort="goal">Goal <span class="sort-arrow" id="sa-goal"></span></th>
+              <th class="col-notes">Notes</th>
+              <th class="col-del"></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div id="toast"></div>
 
   <div id="teamOverlay" class="overlay">
     <div class="dialog">
-      <h3>Add new team</h3>
-      <input id="newTeamInput" placeholder="Team name..." />
+      <h3>Add new area</h3>
+      <input id="newTeamInput" placeholder="Area name..." />
       <div class="dialog-actions">
         <button id="btnCancelTeam" class="btn-ghost" type="button">Cancel</button>
         <button id="btnConfirmTeam" class="btn-primary" type="button">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="goalOverlay" class="overlay">
+    <div class="dialog">
+      <h3>Add new goal</h3>
+      <input id="newGoalInput" placeholder="Goal name..." />
+      <div class="dialog-actions">
+        <button id="btnCancelGoal" class="btn-ghost" type="button">Cancel</button>
+        <button id="btnConfirmGoal" class="btn-primary" type="button">Add</button>
       </div>
     </div>
   </div>

@@ -26,6 +26,7 @@ body {
   color: var(--text);
   font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
   font-size: 14px;
+  overflow-x: hidden;
   padding: 26px 18px 32px;
 }
 
@@ -62,6 +63,43 @@ header h1 {
   font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.03em;
+}
+
+.header-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-link {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  padding: 6px 12px;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+
+.nav-link:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.nav-link.is-active {
+  border-color: rgba(93, 141, 238, 0.3);
+  background: rgba(93, 141, 238, 0.14);
+  color: #fff;
 }
 
 .header-actions {
@@ -181,14 +219,481 @@ select.f:focus {
   padding-right: 4px;
 }
 
-.table-wrap {
+.table-shell {
   width: min(1480px, 100%);
   margin: 0 auto;
-  overflow-x: auto;
+  position: relative;
+  overflow: visible;
+}
+
+.goals-shell {
+  width: min(1480px, 100%);
+  margin: 0 auto;
+  padding: 8px 0 0;
+}
+
+.week-shell {
+  width: min(1480px, 100%);
+  margin: 0 auto;
+  padding: 8px 0 0;
+}
+
+.week-feed-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 0 6px;
+}
+
+.week-feed-input {
+  flex: 1 1 420px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  min-width: 260px;
+  outline: none;
+  padding: 10px 12px;
+  box-shadow: var(--inner-shadow);
+}
+
+.week-feed-input:focus {
+  border-color: rgba(77, 157, 255, 0.5);
+  box-shadow: 0 0 0 4px rgba(77, 157, 255, 0.12);
+}
+
+.week-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 0 6px;
+}
+
+.week-toolbar h2 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.week-label {
+  min-width: 160px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.week-layout {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.week-sidebar,
+.week-main {
+  min-width: 0;
+}
+
+.week-panel {
   border: 1px solid var(--border);
   border-radius: 20px;
   background: var(--surface);
   box-shadow: var(--shadow), var(--inner-shadow);
+  padding: 16px;
+}
+
+.week-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.week-panel-head h3 {
+  font-size: 16px;
+}
+
+.week-backlog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 320px;
+}
+
+.week-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted);
+  text-align: center;
+  padding: 16px;
+}
+
+.week-calendar-panel {
+  overflow: hidden;
+}
+
+.week-calendar {
+  display: grid;
+  grid-template-columns: 70px repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.week-corner,
+.week-day-header,
+.week-hour-label,
+.week-slot {
+  background: var(--surface);
+}
+
+.week-corner,
+.week-day-header {
+  padding: 12px 10px;
+}
+
+.week-corner {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.week-day-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.week-day-header strong {
+  font-size: 13px;
+}
+
+.week-day-header span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.week-hour-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 12px 10px;
+}
+
+.week-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 88px;
+  padding: 8px;
+}
+
+.week-slot-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  border: 1px dashed transparent;
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.16);
+  font-size: 18px;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.week-slot:hover .week-slot-empty {
+  border-color: var(--border);
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.week-task-card,
+.week-scheduled-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+  padding: 10px 12px;
+  box-shadow: var(--inner-shadow);
+}
+
+.week-blocker {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px dashed rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  padding: 8px 10px;
+}
+
+.week-blocker strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.week-blocker span {
+  font-size: 11px;
+}
+
+.week-task-card {
+  cursor: grab;
+}
+
+.week-task-card:active,
+.week-scheduled-card:active {
+  cursor: grabbing;
+}
+
+.week-task-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  padding-right: 16px;
+}
+
+.week-task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.week-unschedule-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  padding: 2px 6px;
+}
+
+.week-unschedule-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+}
+
+.goals-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 0 6px;
+}
+
+.goals-toolbar h2 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.goals-subtitle {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.goal-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.goal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow), var(--inner-shadow);
+  padding: 18px 18px 16px;
+}
+
+.goal-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.goal-card-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.goal-card-subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin-top: 5px;
+}
+
+.goal-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.goal-action-btn {
+  min-width: 40px;
+  padding: 7px 10px;
+}
+
+.goal-action-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.goal-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.goal-stat {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 72px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+  padding: 10px 12px;
+}
+
+.goal-stat strong {
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.goal-stat span {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.goal-task-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.goal-task-row {
+  border-top: 1px solid rgba(127, 164, 211, 0.08);
+  padding: 12px 0;
+}
+
+.goal-task-row:first-child {
+  border-top: 1px solid rgba(127, 164, 211, 0.08);
+}
+
+.goal-task-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.goal-task-name {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.goal-task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.goal-due {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+}
+
+.goal-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  padding: 24px;
+}
+
+.goal-empty-inline {
+  min-height: 0;
+  justify-content: flex-start;
+  border-radius: 14px;
+  padding: 16px 14px;
+}
+
+.insert-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -28px;
+  width: 20px;
+  pointer-events: none;
+}
+
+.table-wrap {
+  width: 100%;
+  margin: 0;
+  overflow: visible;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow), var(--inner-shadow);
+}
+
+.table-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 table {
@@ -240,11 +745,59 @@ tbody tr.selected {
   background: rgba(93, 141, 238, 0.12);
 }
 
+tr.insert-row:hover {
+  background: transparent;
+}
+
 td {
   position: relative;
   padding: 0;
   vertical-align: middle;
   border-bottom: 1px solid rgba(127, 164, 211, 0.08);
+}
+
+tr.insert-row td {
+  height: 2px;
+  padding: 0;
+  border-bottom: none;
+}
+
+.insert-rail-btn {
+  position: absolute;
+  left: 1px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: auto;
+  box-shadow: none;
+  transform: translateY(-50%);
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.insert-rail-btn.is-visible,
+.insert-rail-btn:hover,
+.insert-rail-btn:focus-visible {
+  opacity: 1;
+}
+
+.insert-rail-btn:hover,
+.insert-rail-btn:focus-visible,
+.insert-rail-btn.is-visible {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  outline: none;
 }
 
 .cell-inner {
@@ -299,9 +852,13 @@ td.col-status {
   width: 140px;
 }
 
-td.col-urgent,
-td.col-important {
+td.col-mode,
+td.col-owner {
   width: 120px;
+}
+
+td.col-priority {
+  width: 156px;
 }
 
 td.col-time {
@@ -312,12 +869,12 @@ td.col-deadline {
   width: 130px;
 }
 
-td.col-notes {
+td.col-goal {
   min-width: 180px;
 }
 
-td.col-created {
-  width: 118px;
+td.col-notes {
+  min-width: 180px;
 }
 
 td.col-del {
@@ -342,6 +899,18 @@ td.col-del {
   white-space: nowrap;
 }
 
+.task-name-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-reason-line {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .s-done {
   background: rgba(16, 185, 129, 0.15);
   color: #34d399;
@@ -357,16 +926,49 @@ td.col-del {
   color: #9ca3af;
 }
 
-.u-yes,
-.i-yes {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
+.m-change {
+  background: rgba(59, 130, 246, 0.16);
+  color: #93c5fd;
 }
 
-.u-no,
-.i-no {
-  background: rgba(107, 114, 128, 0.2);
+.m-run {
+  background: rgba(16, 185, 129, 0.16);
+  color: #6ee7b7;
+}
+
+.o-me {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fcd34d;
+}
+
+.o-delegate {
+  background: rgba(168, 85, 247, 0.16);
+  color: #d8b4fe;
+}
+
+.p-must {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.p-should {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
+
+.p-could {
+  background: rgba(59, 130, 246, 0.16);
+  color: #93c5fd;
+}
+
+.p-refine {
+  background: rgba(107, 114, 128, 0.22);
   color: #cbd5e1;
+}
+
+.g-goal {
+  background: rgba(14, 165, 233, 0.14);
+  color: #7dd3fc;
 }
 
 .t-quick {
@@ -511,6 +1113,32 @@ tr.team-header-row.team-dragging {
   color: var(--team-color);
 }
 
+.team-action-btn {
+  margin-left: auto;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0;
+  padding: 5px 10px;
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.team-header-row:hover .team-action-btn,
+.team-action-btn:focus-visible {
+  opacity: 1;
+}
+
+.team-action-btn:hover,
+.team-action-btn:focus-visible {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  outline: none;
+}
+
 #toast {
   position: fixed;
   right: 22px;
@@ -554,6 +1182,13 @@ tr.team-header-row.team-dragging {
   font-size: 17px;
 }
 
+.dialog-copy {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+
 .dialog input {
   width: 100%;
   margin-bottom: 12px;
@@ -591,6 +1226,14 @@ tr.team-header-row.team-dragging {
     font-size: 22px;
   }
 
+  .header-brand {
+    width: 100%;
+  }
+
+  .header-nav {
+    flex-wrap: wrap;
+  }
+
   .filters {
     top: 10px;
     align-items: stretch;
@@ -612,5 +1255,40 @@ tr.team-header-row.team-dragging {
 
   .table-wrap {
     border-radius: 18px;
+  }
+
+  .goal-card {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .goal-card-header {
+    flex-direction: column;
+  }
+
+  .goal-card-actions {
+    justify-content: flex-start;
+  }
+
+  .week-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .week-nav {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .week-label {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .week-calendar {
+    min-width: 720px;
+  }
+
+  .week-main {
+    overflow-x: auto;
   }
 }
