@@ -6,6 +6,7 @@ import argparse
 import csv
 import functools
 import json
+import re
 import sqlite3
 import time
 import urllib.error
@@ -58,7 +59,18 @@ CREATE TABLE IF NOT EXISTS teams (
 
 CREATE TABLE IF NOT EXISTS goals (
     name TEXT PRIMARY KEY,
-    position INTEGER NOT NULL
+    position INTEGER NOT NULL,
+    description TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS pages (
+    id INTEGER PRIMARY KEY,
+    position INTEGER NOT NULL,
+    parent_id INTEGER,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -136,6 +148,20 @@ class TodoStore:
                 connection.execute(
                     "ALTER TABLE tasks ADD COLUMN completed_at TEXT NOT NULL DEFAULT ''"
                 )
+            goal_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(goals)").fetchall()
+            }
+            if "description" not in goal_columns:
+                connection.execute(
+                    "ALTER TABLE goals ADD COLUMN description TEXT NOT NULL DEFAULT ''"
+                )
+            page_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(pages)").fetchall()
+            }
+            if "parent_id" not in page_columns:
+                connection.execute("ALTER TABLE pages ADD COLUMN parent_id INTEGER")
 
             if "prio" in task_columns:
                 connection.execute(
@@ -204,10 +230,13 @@ class TodoStore:
 
             goal_count = connection.execute("SELECT COUNT(*) FROM goals").fetchone()[0]
             if not goal_count:
-                goal_names = self._derive_goal_names(connection)
+                goal_entries = self._derive_goal_entries(connection)
                 connection.executemany(
-                    "INSERT INTO goals (name, position) VALUES (?, ?)",
-                    [(goal, position) for position, goal in enumerate(goal_names)],
+                    "INSERT INTO goals (name, position, description) VALUES (?, ?, ?)",
+                    [
+                        (goal["name"], position, goal["description"])
+                        for position, goal in enumerate(goal_entries)
+                    ],
                 )
 
             connection.execute(
@@ -245,13 +274,19 @@ class TodoStore:
 
         return [str(row["name"]) for row in rows]
 
-    def fetch_goals(self) -> list[str]:
+    def fetch_goals(self) -> list[dict[str, str]]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT name FROM goals ORDER BY position ASC, name ASC"
+                "SELECT name, description FROM goals ORDER BY position ASC, name ASC"
             ).fetchall()
 
-        return [str(row["name"]) for row in rows]
+        return [
+            {
+                "name": str(row["name"]),
+                "description": str(row["description"] or ""),
+            }
+            for row in rows
+        ]
 
     def fetch_settings(self) -> dict[str, str]:
         with self._connect() as connection:
@@ -259,6 +294,18 @@ class TodoStore:
                 "SELECT key, value FROM settings"
             ).fetchall()
         return {str(row["key"]): str(row["value"]) for row in rows}
+
+    def fetch_pages(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, parent_id, title, body, created_at, updated_at
+                FROM pages
+                ORDER BY position ASC, id ASC
+                """
+            ).fetchall()
+
+        return [dict(row) for row in rows]
 
     def update_calendar_feed_url(self, feed_url: str) -> None:
         normalized = str(feed_url or "").strip()
@@ -329,6 +376,7 @@ class TodoStore:
         next_generated_id = 1
         with self._connect() as connection:
             existing_completion = self._fetch_completion_context(connection)
+            existing_pages = self.fetch_pages()
 
         for position, task in enumerate(tasks):
             raw_id = task.get("id")
@@ -366,7 +414,7 @@ class TodoStore:
             )
 
         team_names = self._normalize_team_names(None, tasks)
-        goal_names = self._normalize_goal_names(None, tasks)
+        goal_entries = self._normalize_goals(None, tasks)
 
         with self._connect() as connection:
             connection.execute("BEGIN")
@@ -379,14 +427,16 @@ class TodoStore:
                 [row for row in normalized if row[2]],
             )
             self._replace_teams(connection, team_names)
-            self._replace_goals(connection, goal_names)
+            self._replace_goals(connection, goal_entries)
+            self._replace_pages(connection, self._normalize_pages(existing_pages))
             connection.commit()
 
     def replace_state(
         self,
         tasks: list[dict[str, Any]],
         teams: list[str] | None = None,
-        goals: list[str] | None = None,
+        goals: list[Any] | None = None,
+        pages: list[dict[str, Any]] | None = None,
     ) -> None:
         normalized = []
         used_ids: set[int] = set()
@@ -430,7 +480,10 @@ class TodoStore:
             )
 
         team_names = self._normalize_team_names(teams, tasks)
-        goal_names = self._normalize_goal_names(goals, tasks)
+        goal_entries = self._normalize_goals(goals, tasks)
+        page_entries = self._normalize_pages(
+            pages if pages is not None else self.fetch_pages()
+        )
 
         with self._connect() as connection:
             connection.execute("BEGIN")
@@ -443,7 +496,8 @@ class TodoStore:
                 [row for row in normalized if row[2]],
             )
             self._replace_teams(connection, team_names)
-            self._replace_goals(connection, goal_names)
+            self._replace_goals(connection, goal_entries)
+            self._replace_pages(connection, page_entries)
             connection.commit()
 
     def create_task(self, task: dict[str, Any]) -> dict[str, Any]:
@@ -573,7 +627,7 @@ class TodoStore:
             "owner": self._normalize_owner(task.get("owner", "")),
             "priority": self._normalize_priority(task.get("priority", "")),
             "time_estimate": self._normalize_time_estimate(task.get("time_estimate", "")),
-            "goal": str(task.get("goal", "")).strip(),
+            "goal": self._parse_goal_reference(task.get("goal", ""))[0],
             "deadline": str(task.get("deadline", "")).strip(),
             "scheduled_date": self._normalize_iso_date(task.get("scheduled_date", "")),
             "scheduled_hour": self._normalize_scheduled_hour(task.get("scheduled_hour", "")),
@@ -603,7 +657,7 @@ class TodoStore:
         task_teams = [str(row["team"]).strip() for row in rows if str(row["team"]).strip()]
         return self._merge_team_names(task_teams, [])
 
-    def _derive_goal_names(self, connection: sqlite3.Connection) -> list[str]:
+    def _derive_goal_entries(self, connection: sqlite3.Connection) -> list[dict[str, str]]:
         rows = connection.execute(
             """
             SELECT goal
@@ -614,7 +668,7 @@ class TodoStore:
             """
         ).fetchall()
         task_goals = [str(row["goal"]).strip() for row in rows if str(row["goal"]).strip()]
-        return self._merge_goal_names(task_goals, [])
+        return self._merge_goals(task_goals, [])
 
     def _normalize_team_names(
         self,
@@ -642,31 +696,71 @@ class TodoStore:
 
         return self._merge_team_names(task_teams, provided_teams)
 
-    def _normalize_goal_names(
+    def _normalize_goal_entry(self, goal: Any) -> dict[str, str] | None:
+        if isinstance(goal, dict):
+            name = str(goal.get("name", "")).strip()
+            description = str(goal.get("description", "")).strip()
+        else:
+            name = str(goal or "").strip()
+            description = ""
+
+        name, extracted_description = self._parse_goal_reference(name)
+        if not description:
+            description = extracted_description
+
+        if not name:
+            return None
+
+        return {"name": name, "description": description}
+
+    def _normalize_goals(
         self,
-        goals: list[str] | None,
+        goals: list[Any] | None,
         tasks: list[dict[str, Any]],
-    ) -> list[str]:
+    ) -> list[dict[str, str]]:
         task_goals = []
         seen_task_goals: set[str] = set()
         for task in tasks:
-            goal = str(task.get("goal", "")).strip()
+            goal, _ = self._parse_goal_reference(task.get("goal", ""))
             if not goal or goal in seen_task_goals:
                 continue
             seen_task_goals.add(goal)
             task_goals.append(goal)
 
-        provided_goals = []
+        provided_goals: list[dict[str, str]] = []
         if goals:
             seen_provided: set[str] = set()
             for goal in goals:
-                name = str(goal or "").strip()
-                if not name or name in seen_provided:
+                entry = self._normalize_goal_entry(goal)
+                if entry is None or entry["name"] in seen_provided:
                     continue
-                seen_provided.add(name)
-                provided_goals.append(name)
+                seen_provided.add(entry["name"])
+                provided_goals.append(entry)
 
-        return self._merge_goal_names(task_goals, provided_goals)
+        return self._merge_goals(task_goals, provided_goals)
+
+    def _parse_goal_reference(self, value: Any) -> tuple[str, str]:
+        name = str(value or "").strip()
+        description = ""
+        iterations = 0
+
+        while name and iterations < 6:
+            next_name = self._extract_structured_field(name, "name")
+            if not next_name or next_name == name:
+                break
+            next_description = self._extract_structured_field(name, "description")
+            name = next_name.strip()
+            if not description and next_description:
+                description = next_description.strip()
+            iterations += 1
+
+        return name, description
+
+    def _extract_structured_field(self, source: Any, field_name: str) -> str:
+        text = str(source or "").strip()
+        pattern = re.compile(rf"""["']{re.escape(field_name)}["']\s*:\s*(["'])(.*?)\1""")
+        match = pattern.search(text)
+        return match.group(2) if match else ""
 
     def _merge_team_names(self, task_teams: list[str], ordered_teams: list[str]) -> list[str]:
         merged = []
@@ -692,21 +786,31 @@ class TodoStore:
 
         return merged
 
-    def _merge_goal_names(self, task_goals: list[str], ordered_goals: list[str]) -> list[str]:
-        merged = []
+    def _merge_goals(
+        self,
+        task_goals: list[str],
+        ordered_goals: list[dict[str, str]],
+    ) -> list[dict[str, str]]:
+        merged: list[dict[str, str]] = []
         seen: set[str] = set()
 
         for goal in ordered_goals:
-            if goal in seen:
+            name = str(goal.get("name", "")).strip()
+            if not name or name in seen:
                 continue
-            seen.add(goal)
-            merged.append(goal)
+            seen.add(name)
+            merged.append(
+                {
+                    "name": name,
+                    "description": str(goal.get("description", "")).strip(),
+                }
+            )
 
-        for goal in task_goals:
-            if goal in seen:
+        for goal_name in task_goals:
+            if goal_name in seen:
                 continue
-            seen.add(goal)
-            merged.append(goal)
+            seen.add(goal_name)
+            merged.append({"name": goal_name, "description": ""})
 
         return merged
 
@@ -717,11 +821,43 @@ class TodoStore:
             [(team, position) for position, team in enumerate(team_names)],
         )
 
-    def _replace_goals(self, connection: sqlite3.Connection, goal_names: list[str]) -> None:
+    def _replace_goals(
+        self,
+        connection: sqlite3.Connection,
+        goal_entries: list[dict[str, str]],
+    ) -> None:
         connection.execute("DELETE FROM goals")
         connection.executemany(
-            "INSERT INTO goals (name, position) VALUES (?, ?)",
-            [(goal, position) for position, goal in enumerate(goal_names)],
+            "INSERT INTO goals (name, position, description) VALUES (?, ?, ?)",
+            [
+                (goal["name"], position, goal["description"])
+                for position, goal in enumerate(goal_entries)
+            ],
+        )
+
+    def _replace_pages(
+        self,
+        connection: sqlite3.Connection,
+        pages: list[dict[str, Any]],
+    ) -> None:
+        connection.execute("DELETE FROM pages")
+        connection.executemany(
+            """
+            INSERT INTO pages (id, position, parent_id, title, body, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    page["id"],
+                    position,
+                    page["parent_id"],
+                    page["title"],
+                    page["body"],
+                    page["created_at"],
+                    page["updated_at"],
+                )
+                for position, page in enumerate(pages)
+            ],
         )
 
     def _ensure_team(self, connection: sqlite3.Connection, team_name: str) -> None:
@@ -740,7 +876,12 @@ class TodoStore:
             (team_name, position),
         )
 
-    def _ensure_goal(self, connection: sqlite3.Connection, goal_name: str) -> None:
+    def _ensure_goal(
+        self,
+        connection: sqlite3.Connection,
+        goal_name: str,
+        description: str = "",
+    ) -> None:
         existing = connection.execute(
             "SELECT 1 FROM goals WHERE name = ?",
             (goal_name,),
@@ -752,12 +893,66 @@ class TodoStore:
             "SELECT COALESCE(MAX(position), -1) + 1 FROM goals"
         ).fetchone()[0]
         connection.execute(
-            "INSERT INTO goals (name, position) VALUES (?, ?)",
-            (goal_name, position),
+            "INSERT INTO goals (name, position, description) VALUES (?, ?, ?)",
+            (goal_name, position, str(description or "").strip()),
         )
 
     def _normalize_area(self, team: Any = "", area: Any = "") -> str:
         return str(area or team or "").strip()
+
+    def _normalize_pages(self, pages: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+        normalized: list[dict[str, Any]] = []
+        seen_ids: set[int] = set()
+        next_generated_id = 1
+        raw_parent_ids: dict[int, int | None] = {}
+
+        for page in pages or []:
+            if not isinstance(page, dict):
+                continue
+            raw_id = page.get("id")
+            page_id = raw_id if isinstance(raw_id, int) and raw_id > 0 else None
+            while page_id is None or page_id in seen_ids:
+                while next_generated_id in seen_ids:
+                    next_generated_id += 1
+                page_id = next_generated_id
+                next_generated_id += 1
+
+            title = str(page.get("title", "")).strip() or "Untitled page"
+            body = str(page.get("body", "")).rstrip()
+            created_at = self._normalize_timestamp(page.get("created_at", ""))
+            updated_at = self._normalize_timestamp(page.get("updated_at", ""))
+            if not created_at:
+                created_at = self._now_timestamp()
+            if not updated_at:
+                updated_at = created_at
+
+            seen_ids.add(page_id)
+            raw_parent = page.get("parent_id")
+            raw_parent_ids[page_id] = (
+                raw_parent
+                if isinstance(raw_parent, int) and raw_parent > 0
+                else None
+            )
+            normalized.append(
+                {
+                    "id": page_id,
+                    "parent_id": None,
+                    "title": title,
+                    "body": body,
+                    "created_at": created_at,
+                    "updated_at": updated_at,
+                }
+            )
+
+        id_set = {page["id"] for page in normalized}
+        for page in normalized:
+            parent_id = raw_parent_ids.get(page["id"])
+            if parent_id is None or parent_id == page["id"] or parent_id not in id_set:
+                page["parent_id"] = None
+            else:
+                page["parent_id"] = parent_id
+
+        return normalized
 
     def _normalize_mode(self, value: Any) -> str:
         raw = str(value or "").strip().lower()
@@ -791,6 +986,19 @@ class TodoStore:
         raw = str(value or "").strip()
         allowed = {"<5m", "15m", "30m", "1h", "2h+"}
         return raw if raw in allowed else ""
+
+    def _normalize_timestamp(self, value: Any) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return ""
+        return parsed.astimezone(UTC).isoformat(timespec="seconds")
+
+    def _now_timestamp(self) -> str:
+        return datetime.now(UTC).isoformat(timespec="seconds")
 
     def _normalize_scheduled_hour(self, value: Any) -> str:
         raw = str(value or "").strip()
@@ -1114,7 +1322,12 @@ class TodoRequestHandler(SimpleHTTPRequestHandler):
             self.send_error(HTTPStatus.BAD_REQUEST, "Expected goals array")
             return
 
-        self.store.replace_state(tasks, teams, goals)
+        pages = payload.get("pages")
+        if pages is not None and not isinstance(pages, list):
+            self.send_error(HTTPStatus.BAD_REQUEST, "Expected pages array")
+            return
+
+        self.store.replace_state(tasks, teams, goals, pages)
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Last-Modified", self.store.last_modified())
         self.send_header("Cache-Control", "no-store")
@@ -1224,6 +1437,7 @@ class TodoRequestHandler(SimpleHTTPRequestHandler):
                 "tasks": self.store.fetch_tasks(),
                 "teams": self.store.fetch_teams(),
                 "goals": self.store.fetch_goals(),
+                "pages": self.store.fetch_pages(),
                 "settings": self.store.fetch_settings(),
             }
         ).encode("utf-8")
