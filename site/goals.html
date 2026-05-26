@@ -4,25 +4,36 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Task Atlas Goals</title>
+  <script>
+    (() => {
+      try {
+        if (window.sessionStorage.getItem("task-atlas.top-chrome-pinned") === "1") {
+          document.documentElement.classList.add("top-chrome-pinned");
+        }
+      } catch (error) {}
+    })();
+  </script>
   <link rel="stylesheet" href="./assets/css/app.css" />
   <script src="./assets/js/app.js" defer></script>
 </head>
 <body data-view="goals">
-  <header>
-    <div class="header-brand">
-      <h1>Task Atlas</h1>
-      <nav class="header-nav">
-        <a class="nav-link" href="./index.html">Board</a>
-        <a class="nav-link is-active" href="./goals.html">Goals</a>
-        <a class="nav-link" href="./focus-week.html">Focus Week</a>
-      </nav>
-    </div>
-    <div class="header-actions">
-      <button id="btnAddGoal" class="btn-primary" type="button">+ Add goal</button>
-    </div>
-  </header>
+  <div class="top-chrome">
+    <header>
+      <div class="header-brand">
+        <h1>Task Atlas</h1>
+        <nav class="header-nav">
+          <a class="nav-link" href="./index.html">Board</a>
+          <a class="nav-link is-active" href="./goals.html">Goals</a>
+          <a class="nav-link" href="./focus-week.html">Focus Week</a>
+          <a class="nav-link" href="./pages.html">Pages</a>
+        </nav>
+      </div>
+      <div class="header-actions">
+        <button id="btnAddGoal" class="btn-primary" type="button">+ Add goal</button>
+        <button id="btnLogout" class="btn-ghost" type="button">Sign out</button>
+      </div>
+    </header>
 
-  <section class="goals-shell">
     <div class="goals-toolbar">
       <div>
         <h2>Goals</h2>
@@ -30,6 +41,13 @@
       </div>
       <span id="statsLine" class="stats-line"></span>
     </div>
+
+    <div class="top-peek">
+      <span>Menu</span>
+    </div>
+  </div>
+
+  <section class="goals-shell">
     <div id="goalList" class="goal-grid"></div>
   </section>
 
@@ -42,6 +60,139 @@
       <div class="dialog-actions">
         <button id="btnCancelGoal" class="btn-ghost" type="button">Cancel</button>
         <button id="btnConfirmGoal" class="btn-primary" type="button">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="goalDescriptionOverlay" class="overlay">
+    <div class="dialog dialog-wide">
+      <h3 id="goalDescriptionHeading">Edit goal description</h3>
+      <p id="goalDescriptionLabel" class="dialog-copy"></p>
+      <label class="dialog-field dialog-field-full">
+        <span>Description</span>
+        <textarea
+          id="goalDescriptionInput"
+          rows="7"
+          placeholder="Add context, intent, OKR framing, or success criteria for this goal..."
+        ></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button id="btnCancelGoalDescription" class="btn-ghost" type="button">Cancel</button>
+        <button id="btnConfirmGoalDescription" class="btn-primary" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="weekTaskOverlay" class="overlay">
+    <div class="dialog dialog-wide">
+      <h3 id="weekTaskHeading">Edit task</h3>
+      <p id="weekTaskSlotLabel" class="dialog-copy"></p>
+      <div class="dialog-grid">
+        <label class="dialog-field dialog-field-full">
+          <span>Task</span>
+          <input id="weekTaskInput" placeholder="Task name..." />
+        </label>
+
+        <label class="dialog-field">
+          <span>Status</span>
+          <select id="weekTaskStatus">
+            <option>Not started</option>
+            <option>In development</option>
+            <option>Done</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Area</span>
+          <select id="weekTaskTeam"></select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Mode</span>
+          <select id="weekTaskMode">
+            <option value="">-</option>
+            <option>Run</option>
+            <option>Change</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Owner</span>
+          <select id="weekTaskOwner">
+            <option value="">-</option>
+            <option>Me</option>
+            <option>Delegate</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Priority</span>
+          <select id="weekTaskPriority">
+            <option value="">-</option>
+            <option>Must</option>
+            <option>Should</option>
+            <option>Could</option>
+            <option>Needs refinement</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Effort</span>
+          <select id="weekTaskTime">
+            <option value="">-</option>
+            <option>&lt;5m</option>
+            <option>15m</option>
+            <option>30m</option>
+            <option>1h</option>
+            <option>2h+</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Date</span>
+          <input id="weekTaskDate" type="date" />
+        </label>
+
+        <label class="dialog-field">
+          <span>Hour</span>
+          <select id="weekTaskHour">
+            <option value="">-</option>
+            <option>08:00</option>
+            <option>09:00</option>
+            <option>10:00</option>
+            <option>11:00</option>
+            <option>12:00</option>
+            <option>13:00</option>
+            <option>14:00</option>
+            <option>15:00</option>
+            <option>16:00</option>
+            <option>17:00</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Due</span>
+          <input id="weekTaskDeadline" type="date" />
+        </label>
+
+        <div id="weekTaskCreatedField" class="dialog-field" hidden>
+          <span>Created</span>
+          <div id="weekTaskCreatedAt" class="dialog-static-value" aria-live="polite">—</div>
+        </div>
+
+        <label class="dialog-field dialog-field-full">
+          <span>Goal</span>
+          <select id="weekTaskGoal"></select>
+        </label>
+
+        <label class="dialog-field dialog-field-full">
+          <span>Notes</span>
+          <textarea id="weekTaskNotes" rows="4" placeholder="Notes..."></textarea>
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button id="btnCancelWeekTask" class="btn-ghost" type="button">Cancel</button>
+        <button id="btnConfirmWeekTask" class="btn-primary" type="button">Save</button>
       </div>
     </div>
   </div>

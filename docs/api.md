@@ -79,7 +79,20 @@ Response:
 ```json
 {
   "teams": ["BUH", "Sales", "Product"],
-  "goals": ["Stabilize the BU operating cadence", "Create a usable Q2 operating plan"],
+  "settings": {
+    "calendar_feed_url": "",
+    "team_colors": "{\"BUH\":{\"color\":\"#3b82f6\",\"background\":\"#3b82f6\"}}"
+  },
+  "goals": [
+    {
+      "name": "Stabilize the BU operating cadence",
+      "description": "Create a stable weekly management rhythm and make ownership visible."
+    },
+    {
+      "name": "Create a usable Q2 operating plan",
+      "description": ""
+    }
+  ],
   "tasks": [
     {
       "id": 1,
@@ -150,6 +163,8 @@ Behavior:
 - the submitted array order becomes the persisted order
 - the submitted `teams` array becomes the persisted team-group order
 - the submitted `goals` array becomes the persisted goal list/order
+- the optional submitted `settings` object updates persisted settings such as `calendar_feed_url` and serialized `team_colors`
+- each goal entry may be a plain string for backward compatibility or an object with `name` and `description`
 - rows with empty `name` are ignored
 - duplicate or missing ids are normalized by the server
 

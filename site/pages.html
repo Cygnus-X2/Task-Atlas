@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Task Atlas Pages</title>
+  <script>
+    (() => {
+      try {
+        if (window.sessionStorage.getItem("task-atlas.top-chrome-pinned") === "1") {
+          document.documentElement.classList.add("top-chrome-pinned");
+        }
+      } catch (error) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="./assets/css/app.css" />
+  <script src="./assets/js/app.js" defer></script>
+</head>
+<body data-view="pages">
+  <div class="top-chrome">
+    <header>
+      <div class="header-brand">
+        <h1>Task Atlas</h1>
+        <nav class="header-nav">
+          <a class="nav-link" href="./index.html">Board</a>
+          <a class="nav-link" href="./goals.html">Goals</a>
+          <a class="nav-link" href="./focus-week.html">Focus Week</a>
+          <a class="nav-link is-active" href="./pages.html">Pages</a>
+        </nav>
+      </div>
+      <div class="header-actions">
+        <button id="btnAddPage" class="btn-primary" type="button">+ Add page</button>
+        <button id="btnLogout" class="btn-ghost" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <div class="goals-toolbar">
+      <div>
+        <h2>Pages</h2>
+        <p class="goals-subtitle">A long-form space to capture thoughts, plans, and rough thinking before it turns into tasks.</p>
+      </div>
+      <span id="statsLine" class="stats-line"></span>
+    </div>
+
+    <div class="top-peek">
+      <span>Menu</span>
+    </div>
+  </div>
+
+  <section class="pages-shell">
+
+    <div class="pages-layout">
+      <aside class="pages-sidebar">
+        <div class="week-panel">
+          <div class="week-panel-head">
+            <div class="pages-sidebar-head-row">
+              <h3>Pages</h3>
+              <button id="btnQuickAddPage" class="page-quick-add-btn" type="button" aria-label="Add page">+</button>
+            </div>
+            <input
+              id="pageSearchInput"
+              class="page-search-input"
+              type="search"
+              placeholder="Search page titles"
+              aria-label="Search page titles"
+            />
+          </div>
+          <div id="pageList" class="page-list"></div>
+        </div>
+      </aside>
+
+      <section class="pages-main">
+        <div class="week-panel pages-editor-panel">
+          <div class="pages-editor-scroll">
+            <div class="pages-editor-sticky">
+              <div class="pages-editor-head">
+                <input id="pageTitleInput" class="page-title-input" placeholder="Untitled page" />
+                <div class="page-toolbar" aria-label="Text formatting">
+                  <button class="page-tool-btn" type="button" data-page-command="bold" title="Bold">B</button>
+                  <button class="page-tool-btn" type="button" data-page-command="italic" title="Italic">I</button>
+                  <button class="page-tool-btn" type="button" data-page-command="h1" title="Heading 1">H1</button>
+                  <button class="page-tool-btn" type="button" data-page-command="h2" title="Heading 2">H2</button>
+                  <button class="page-tool-btn" type="button" data-page-command="h3" title="Heading 3">H3</button>
+                  <button class="page-tool-btn" type="button" data-page-command="p" title="Paragraph">P</button>
+                  <button class="page-tool-btn" type="button" data-page-command="ul" title="Bullet list">• List</button>
+                  <button class="page-tool-btn" type="button" data-page-command="ol" title="Numbered list">1. List</button>
+                  <button class="page-tool-btn" type="button" data-page-command="table" title="Table">Table</button>
+                  <button class="page-tool-btn" type="button" data-page-command="quote" title="Quote">Quote</button>
+                  <button class="page-tool-btn" type="button" data-page-command="clear" title="Clear formatting">Clear</button>
+                </div>
+                <div class="pages-editor-actions">
+                  <span id="pageMeta" class="stats-line"></span>
+                  <button id="btnPageFocus" class="btn-ghost" type="button">Focus</button>
+                  <button id="btnDeletePage" class="btn-danger" type="button">Delete page</button>
+                </div>
+              </div>
+            </div>
+            <div
+              id="pageBodyInput"
+              class="page-body-input"
+              contenteditable="true"
+              data-placeholder="Capture thoughts, draft plans, rough notes, next moves, or reflections here..."
+            ></div>
+            <div id="pageEmojiMenu" class="page-emoji-menu" aria-label="Emoji suggestions"></div>
+            <div id="pageTableMenu" class="page-table-menu" aria-label="Table controls">
+              <button class="page-tool-btn page-table-menu-btn" type="button" data-page-command="table-add-row" title="Add row below">+Row</button>
+              <button class="page-tool-btn page-table-menu-btn" type="button" data-page-command="table-del-row" title="Delete current row">-Row</button>
+              <button class="page-tool-btn page-table-menu-btn" type="button" data-page-command="table-add-col" title="Add column right">+Col</button>
+              <button class="page-tool-btn page-table-menu-btn" type="button" data-page-command="table-del-col" title="Delete current column">-Col</button>
+            </div>
+            <div id="pageImageMenu" class="page-image-menu" aria-label="Screenshot size controls">
+              <button class="page-tool-btn page-image-menu-btn" type="button" data-page-image-size="40" title="40%">S</button>
+              <button class="page-tool-btn page-image-menu-btn" type="button" data-page-image-size="70" title="70%">M</button>
+              <button class="page-tool-btn page-image-menu-btn" type="button" data-page-image-size="100" title="100%">L</button>
+              <label class="page-image-size-control" for="pageImageSizeInput">
+                <span>Size</span>
+                <input id="pageImageSizeInput" type="range" min="20" max="100" step="5" value="100" />
+              </label>
+              <span id="pageImageSizeValue" class="page-image-size-value">100%</span>
+            </div>
+          </div>
+          <div id="pageEmpty" class="goal-empty">No pages yet. Add one to start writing.</div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <div id="toast"></div>
+
+  <div id="pageOverlay" class="overlay">
+    <div class="dialog">
+      <h3>Add new page</h3>
+      <input id="newPageInput" placeholder="Page title..." />
+      <div class="dialog-actions">
+        <button id="btnCancelPage" class="btn-ghost" type="button">Cancel</button>
+        <button id="btnConfirmPage" class="btn-primary" type="button">Add</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

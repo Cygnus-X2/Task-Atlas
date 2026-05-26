@@ -3,9 +3,9 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SITE_DIR="$(cd "$SCRIPT_DIR/../site" && pwd)"
 DATA_DIR="$(cd "$SCRIPT_DIR/../data" && pwd)"
-DB_FILE="$DATA_DIR/tasks.db"
-SEED_CSV="$DATA_DIR/tasks.csv"
-PORT="80"
+DB_FILE="${TODO_DB_FILE:-$DATA_DIR/tasks.db}"
+SEED_CSV="${TODO_SEED_CSV:-$DATA_DIR/tasks.csv}"
+PORT="${PORT:-80}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -58,7 +58,7 @@ echo "  Press Ctrl+C to stop."
 echo ""
 
 if [ "$PORT" -lt 1024 ]; then
-  sudo python3 "$SCRIPT_DIR/todo_server.py" --site-dir "$SITE_DIR" --db-file "$DB_FILE" --seed-csv "$SEED_CSV" --port "$PORT"
+  sudo python3 "$SCRIPT_DIR/todo_server.py" --site-dir "${TODO_SITE_DIR:-$SITE_DIR}" --db-file "$DB_FILE" --seed-csv "$SEED_CSV" --port "$PORT"
 else
-  python3 "$SCRIPT_DIR/todo_server.py" --site-dir "$SITE_DIR" --db-file "$DB_FILE" --seed-csv "$SEED_CSV" --port "$PORT"
+  python3 "$SCRIPT_DIR/todo_server.py" --site-dir "${TODO_SITE_DIR:-$SITE_DIR}" --db-file "$DB_FILE" --seed-csv "$SEED_CSV" --port "$PORT"
 fi

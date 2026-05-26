@@ -5,6 +5,8 @@ Small local task board with:
 - a static frontend in `site/`
 - a local Python server in `scripts/`
 - a SQLite database in `data/tasks.db`
+- optional single-user login via environment variables
+- Docker packaging for easy web deployment on any container host
 
 The frontend edits tasks through a local API instead of storing data in the browser.
 
@@ -16,6 +18,12 @@ Start on a non-privileged port:
 bash scripts/start-todo.sh 8000
 ```
 
+Or run the server directly with repo-relative defaults:
+
+```bash
+python3 scripts/todo_server.py
+```
+
 Then open:
 
 ```text
@@ -23,6 +31,78 @@ http://127.0.0.1:8000
 ```
 
 If you omit the port, the script defaults to `80`.
+
+## Login / Auth
+
+Authentication is off by default for local use.
+
+Turn it on by setting:
+
+```bash
+export TODO_AUTH_ENABLED=1
+export TODO_USERNAME=admin
+export TODO_PASSWORD='replace-this'
+export TODO_SESSION_SECRET='replace-with-a-long-random-string'
+```
+
+Optional:
+
+```bash
+export TODO_SESSION_TTL_HOURS=168
+```
+
+When auth is enabled:
+
+- unauthenticated page requests redirect to `/login.html`
+- API requests return `401`
+- login uses a signed HTTP-only cookie
+
+## Docker / Web Deploy
+
+The app now ships with a `Dockerfile`, so the easiest deployment path is any host that can run a single Docker container plus a persistent volume for SQLite.
+
+Build locally:
+
+```bash
+docker build -t todo-board .
+```
+
+Run locally in Docker:
+
+```bash
+docker run \
+  -p 8000:8000 \
+  -e PORT=8000 \
+  -e TODO_AUTH_ENABLED=1 \
+  -e TODO_USERNAME=admin \
+  -e TODO_PASSWORD='replace-this' \
+  -e TODO_SESSION_SECRET='replace-with-a-long-random-string' \
+  -v "$PWD/data:/app/data" \
+  todo-board
+```
+
+For a public deployment:
+
+- use the included `Dockerfile`
+- mount persistent storage and point `TODO_DB_FILE` at that disk if needed
+- set `PORT` from the platform
+- set `TODO_AUTH_ENABLED=1`
+- store `TODO_PASSWORD` and `TODO_SESSION_SECRET` as platform secrets
+- run behind HTTPS so the login cookie can be marked `Secure`
+
+Useful env vars:
+
+```text
+PORT=8000
+TODO_SITE_DIR=/app/site
+TODO_DB_FILE=/app/data/tasks.db
+TODO_SEED_CSV=/app/data/tasks.csv
+TODO_AUTH_ENABLED=1
+TODO_USERNAME=admin
+TODO_PASSWORD=...
+TODO_SESSION_SECRET=...
+TODO_SESSION_TTL_HOURS=168
+```
 
 ## Restart The Service
 

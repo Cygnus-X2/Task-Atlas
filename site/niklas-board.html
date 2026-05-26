@@ -15,6 +15,7 @@
         <a class="nav-link is-active" href="./niklas-board.html">Board</a>
         <a class="nav-link" href="./goals.html">Goals</a>
         <a class="nav-link" href="./focus-week.html">Focus Week</a>
+        <a class="nav-link" href="./pages.html">Pages</a>
       </nav>
     </div>
     <div class="header-actions">
@@ -24,6 +25,7 @@
       <button id="btnImport" class="btn-ghost" type="button">↑ Import CSV</button>
       <input id="csvIn" type="file" accept=".csv" />
       <button id="btnExport" class="btn-primary" type="button">↓ Export CSV</button>
+      <button id="btnLogout" class="btn-ghost" type="button">Sign out</button>
     </div>
   </header>
 
@@ -57,6 +59,11 @@
       <option>2h+</option>
     </select>
     <input class="search" id="fSearch" placeholder="Search tasks..." />
+    <button id="btnClearFilters" class="btn-ghost" type="button">Filter off</button>
+    <label class="board-toggle" for="toggleCreatedAt">
+      <input id="toggleCreatedAt" type="checkbox" />
+      <span>Created</span>
+    </label>
     <button id="btnDelegatable" class="btn-ghost push-right" type="button">Delegatable</button>
     <button id="btnFocus" class="btn-ghost push-right" type="button">Focus</button>
     <button id="btnSmart" class="btn-ghost push-right" type="button">Smart</button>
@@ -80,6 +87,7 @@
               <th class="col-priority" data-sort="priority">Priority <span class="sort-arrow" id="sa-priority"></span></th>
               <th class="col-time" data-sort="time_estimate">Effort <span class="sort-arrow" id="sa-time_estimate"></span></th>
               <th class="col-deadline" data-sort="deadline">Due <span class="sort-arrow" id="sa-deadline"></span></th>
+              <th class="col-created" data-sort="created_at">Created <span class="sort-arrow" id="sa-created_at"></span></th>
               <th class="col-goal" data-sort="goal">Goal <span class="sort-arrow" id="sa-goal"></span></th>
               <th class="col-notes">Notes</th>
               <th class="col-del"></th>

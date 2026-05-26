@@ -4,38 +4,59 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Task Atlas Focus Week</title>
+  <script>
+    (() => {
+      try {
+        if (window.sessionStorage.getItem("task-atlas.top-chrome-pinned") === "1") {
+          document.documentElement.classList.add("top-chrome-pinned");
+        }
+      } catch (error) {}
+    })();
+  </script>
   <link rel="stylesheet" href="./assets/css/app.css" />
   <script src="./assets/js/app.js" defer></script>
 </head>
 <body data-view="week">
-  <header>
-    <div class="header-brand">
-      <h1>Task Atlas</h1>
-      <nav class="header-nav">
-        <a class="nav-link" href="./index.html">Board</a>
-        <a class="nav-link" href="./goals.html">Goals</a>
-        <a class="nav-link is-active" href="./focus-week.html">Focus Week</a>
-      </nav>
+  <div class="week-top-chrome">
+    <header>
+      <div class="header-brand">
+        <h1>Task Atlas</h1>
+        <nav class="header-nav">
+          <a class="nav-link" href="./index.html">Board</a>
+          <a class="nav-link" href="./goals.html">Goals</a>
+          <a class="nav-link is-active" href="./focus-week.html">Focus Week</a>
+          <a class="nav-link" href="./pages.html">Pages</a>
+        </nav>
+      </div>
+      <div class="header-actions">
+        <button id="btnAddTask" class="btn-ghost" type="button">+ Add task</button>
+        <button id="btnLogout" class="btn-ghost" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <details class="week-settings">
+      <summary class="week-settings-summary">Calendar settings</summary>
+      <div class="week-feed-bar">
+        <input id="calendarFeedInput" class="week-feed-input" placeholder="Paste Outlook ICS feed URL..." />
+        <button id="btnSaveCalendarFeed" class="btn-primary" type="button">Save feed</button>
+        <span id="calendarFeedStatus" class="stats-line"></span>
+      </div>
+    </details>
+
+    <div class="week-top-peek">
+      <span>Menu</span>
     </div>
-    <div class="header-actions">
-      <button id="btnAddTask" class="btn-ghost" type="button">+ Add task</button>
-      <button id="btnWeekToday" class="btn-ghost" type="button">Today</button>
-    </div>
-  </header>
+  </div>
 
   <section class="week-shell">
-    <div class="week-feed-bar">
-      <input id="calendarFeedInput" class="week-feed-input" placeholder="Paste Outlook ICS feed URL..." />
-      <button id="btnSaveCalendarFeed" class="btn-primary" type="button">Save feed</button>
-      <span id="calendarFeedStatus" class="stats-line"></span>
-    </div>
-
     <div class="week-toolbar">
       <div>
         <h2>Focus Week</h2>
         <p class="goals-subtitle">Drag tasks into the calendar to build the week. Feed events block slots visually, but you can still double-book intentionally.</p>
       </div>
       <div class="week-nav">
+        <button id="btnRefreshCalendar" class="btn-ghost" type="button">Refresh calendar</button>
+        <button id="btnWeekToday" class="btn-ghost" type="button">Today</button>
         <button id="btnWeekPrev" class="btn-ghost" type="button">← Prev</button>
         <div id="weekLabel" class="week-label"></div>
         <button id="btnWeekNext" class="btn-ghost" type="button">Next →</button>
@@ -50,6 +71,20 @@
             <h3>Backlog</h3>
             <span id="weekBacklogCount" class="stats-line"></span>
           </div>
+          <div class="week-backlog-filters">
+            <label class="week-backlog-filter">
+              <span>Goal</span>
+              <select id="weekBacklogGoalFilter" class="f">
+                <option value="">All goals</option>
+              </select>
+            </label>
+            <label class="week-backlog-filter">
+              <span>Area</span>
+              <select id="weekBacklogAreaFilter" class="f">
+                <option value="">All areas</option>
+              </select>
+            </label>
+          </div>
           <div id="weekBacklog" class="week-backlog"></div>
         </div>
       </aside>
@@ -60,7 +95,9 @@
             <h3>Calendar</h3>
             <span class="stats-line">Drag tasks into hourly slots</span>
           </div>
-          <div id="weekCalendar" class="week-calendar"></div>
+          <div class="week-calendar-scroll">
+            <div id="weekCalendar" class="week-calendar"></div>
+          </div>
         </div>
       </section>
     </div>
@@ -69,10 +106,112 @@
   <div id="toast"></div>
 
   <div id="weekTaskOverlay" class="overlay">
-    <div class="dialog">
-      <h3>Add task to week</h3>
+    <div class="dialog dialog-wide">
+      <h3 id="weekTaskHeading">Add task to week</h3>
       <p id="weekTaskSlotLabel" class="dialog-copy"></p>
-      <input id="weekTaskInput" placeholder="Task name..." />
+      <div class="dialog-grid">
+        <label class="dialog-field dialog-field-full">
+          <span>Task</span>
+          <input id="weekTaskInput" placeholder="Task name..." />
+        </label>
+
+        <label class="dialog-field">
+          <span>Status</span>
+          <select id="weekTaskStatus">
+            <option>Not started</option>
+            <option>In development</option>
+            <option>Done</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Area</span>
+          <select id="weekTaskTeam"></select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Mode</span>
+          <select id="weekTaskMode">
+            <option value="">-</option>
+            <option>Run</option>
+            <option>Change</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Owner</span>
+          <select id="weekTaskOwner">
+            <option value="">-</option>
+            <option>Me</option>
+            <option>Delegate</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Priority</span>
+          <select id="weekTaskPriority">
+            <option value="">-</option>
+            <option>Must</option>
+            <option>Should</option>
+            <option>Could</option>
+            <option>Needs refinement</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Effort</span>
+          <select id="weekTaskTime">
+            <option value="">-</option>
+            <option>&lt;5m</option>
+            <option>15m</option>
+            <option>30m</option>
+            <option>1h</option>
+            <option>2h+</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Date</span>
+          <input id="weekTaskDate" type="date" />
+        </label>
+
+        <label class="dialog-field">
+          <span>Hour</span>
+          <select id="weekTaskHour">
+            <option value="">-</option>
+            <option>08:00</option>
+            <option>09:00</option>
+            <option>10:00</option>
+            <option>11:00</option>
+            <option>12:00</option>
+            <option>13:00</option>
+            <option>14:00</option>
+            <option>15:00</option>
+            <option>16:00</option>
+            <option>17:00</option>
+          </select>
+        </label>
+
+        <label class="dialog-field">
+          <span>Due</span>
+          <input id="weekTaskDeadline" type="date" />
+        </label>
+
+        <div id="weekTaskCreatedField" class="dialog-field" hidden>
+          <span>Created</span>
+          <div id="weekTaskCreatedAt" class="dialog-static-value" aria-live="polite">—</div>
+        </div>
+
+        <label class="dialog-field dialog-field-full">
+          <span>Goal</span>
+          <select id="weekTaskGoal"></select>
+        </label>
+
+        <label class="dialog-field dialog-field-full">
+          <span>Notes</span>
+          <textarea id="weekTaskNotes" rows="4" placeholder="Notes..."></textarea>
+        </label>
+      </div>
       <div class="dialog-actions">
         <button id="btnCancelWeekTask" class="btn-ghost" type="button">Cancel</button>
         <button id="btnConfirmWeekTask" class="btn-primary" type="button">Add</button>

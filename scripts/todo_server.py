@@ -3,21 +3,27 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import functools
+import hashlib
+import hmac
 import json
+import os
 import re
+import secrets
 import sqlite3
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.utils import formatdate
+from http.cookies import SimpleCookie
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 DEFAULT_TEAMS = [
     "BUH",
@@ -29,6 +35,15 @@ DEFAULT_TEAMS = [
 ]
 
 UTC = timezone.utc
+WEEKDAY_INDEX = {
+    "MO": 0,
+    "TU": 1,
+    "WE": 2,
+    "TH": 3,
+    "FR": 4,
+    "SA": 5,
+    "SU": 6,
+}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
@@ -437,6 +452,7 @@ class TodoStore:
         teams: list[str] | None = None,
         goals: list[Any] | None = None,
         pages: list[dict[str, Any]] | None = None,
+        settings: dict[str, Any] | None = None,
     ) -> None:
         normalized = []
         used_ids: set[int] = set()
@@ -484,8 +500,15 @@ class TodoStore:
         page_entries = self._normalize_pages(
             pages if pages is not None else self.fetch_pages()
         )
+        normalized_settings = self._normalize_settings_payload(settings)
 
         with self._connect() as connection:
+            current_settings = {
+                str(row["key"]): str(row["value"])
+                for row in connection.execute("SELECT key, value FROM settings").fetchall()
+            }
+            if normalized_settings:
+                current_settings.update(normalized_settings)
             connection.execute("BEGIN")
             connection.execute("DELETE FROM tasks")
             connection.executemany(
@@ -498,6 +521,7 @@ class TodoStore:
             self._replace_teams(connection, team_names)
             self._replace_goals(connection, goal_entries)
             self._replace_pages(connection, page_entries)
+            self._replace_settings(connection, current_settings)
             connection.commit()
 
     def create_task(self, task: dict[str, Any]) -> dict[str, Any]:
@@ -786,6 +810,21 @@ class TodoStore:
 
         return merged
 
+    def _normalize_settings_payload(
+        self, settings: dict[str, Any] | None
+    ) -> dict[str, str]:
+        if not isinstance(settings, dict):
+            return {}
+
+        normalized: dict[str, str] = {}
+        for key, value in settings.items():
+            name = str(key or "").strip()
+            if not name:
+                continue
+            normalized[name] = str(value or "")
+
+        return normalized
+
     def _merge_goals(
         self,
         task_goals: list[str],
@@ -819,6 +858,17 @@ class TodoStore:
         connection.executemany(
             "INSERT INTO teams (name, position) VALUES (?, ?)",
             [(team, position) for position, team in enumerate(team_names)],
+        )
+
+    def _replace_settings(
+        self,
+        connection: sqlite3.Connection,
+        settings: dict[str, str],
+    ) -> None:
+        connection.execute("DELETE FROM settings")
+        connection.executemany(
+            "INSERT INTO settings (key, value) VALUES (?, ?)",
+            [(key, value) for key, value in settings.items() if str(key).strip()],
         )
 
     def _replace_goals(
@@ -1042,7 +1092,7 @@ class TodoStore:
         start_day = datetime.strptime(start, "%Y-%m-%d")
         end_day = start_day + timedelta(days=days)
         unfolded = self._unfold_ics_lines(raw_calendar)
-        events: list[dict[str, str]] = []
+        raw_events: list[dict[str, str]] = []
         current: dict[str, str] | None = None
 
         for line in unfolded:
@@ -1051,16 +1101,51 @@ class TodoStore:
                 continue
             if line == "END:VEVENT":
                 if current:
-                    event = self._normalize_calendar_event(current, start_day, end_day)
-                    if event:
-                        events.append(event)
+                    raw_events.append(current)
                 current = None
                 continue
             if current is None or ":" not in line:
                 continue
 
             key, value = line.split(":", 1)
-            current[key] = value
+            if key in current:
+                current[key] = f"{current[key]}\n{value}"
+            else:
+                current[key] = value
+
+        events: list[dict[str, str]] = []
+        recurring_events: list[dict[str, str]] = []
+        overrides: dict[tuple[str, str], dict[str, str]] = {}
+
+        for raw_event in raw_events:
+            recurrence_key = self._get_calendar_recurrence_key(raw_event)
+            uid = str(raw_event.get("UID", "")).strip()
+            if recurrence_key and uid:
+                overrides[(uid, recurrence_key)] = raw_event
+
+            if recurrence_key:
+                event = self._normalize_calendar_event(raw_event, start_day, end_day)
+                if event:
+                    events.append(event)
+                continue
+
+            if "RRULE" in raw_event:
+                recurring_events.append(raw_event)
+                continue
+
+            event = self._normalize_calendar_event(raw_event, start_day, end_day)
+            if event:
+                events.append(event)
+
+        for raw_event in recurring_events:
+            events.extend(
+                self._expand_recurring_calendar_event(
+                    raw_event,
+                    overrides=overrides,
+                    range_start=start_day,
+                    range_end=end_day,
+                )
+            )
 
         events.sort(key=lambda event: (event["start"], event["summary"].lower()))
         return events
@@ -1084,23 +1169,12 @@ class TodoStore:
         range_start: datetime,
         range_end: datetime,
     ) -> dict[str, str] | None:
-        start_key = next((key for key in event if key.startswith("DTSTART")), "")
-        end_key = next((key for key in event if key.startswith("DTEND")), "")
-        if not start_key:
+        start_info = self._get_calendar_datetime_field(event, "DTSTART")
+        if start_info is None:
             return None
 
-        start_value = event[start_key]
-        end_value = event.get(end_key, "")
-        start_dt, all_day = self._parse_ics_datetime(start_key, start_value)
-        if start_dt is None:
-            return None
-
-        if end_value:
-            end_dt, _ = self._parse_ics_datetime(end_key, end_value)
-        else:
-            end_dt = start_dt + (timedelta(days=1) if all_day else timedelta(hours=1))
-
-        if end_dt is None:
+        start_dt, end_dt, all_day = start_info
+        if start_dt is None or end_dt is None:
             return None
 
         if end_dt <= range_start or start_dt >= range_end:
@@ -1115,6 +1189,329 @@ class TodoStore:
             "all_day": "true" if all_day else "false",
             "blocking": "true" if blocking else "false",
         }
+
+    def _expand_recurring_calendar_event(
+        self,
+        event: dict[str, str],
+        *,
+        overrides: dict[tuple[str, str], dict[str, str]],
+        range_start: datetime,
+        range_end: datetime,
+    ) -> list[dict[str, str]]:
+        start_info = self._get_calendar_datetime_field(event, "DTSTART")
+        if start_info is None:
+            return []
+
+        start_dt, end_dt, all_day = start_info
+        if start_dt is None or end_dt is None:
+            return []
+
+        rule = self._parse_calendar_rrule(str(event.get("RRULE", "")).strip())
+        if not rule:
+            normalized = self._normalize_calendar_event(event, range_start, range_end)
+            return [normalized] if normalized else []
+
+        uid = str(event.get("UID", "")).strip()
+        duration = end_dt - start_dt
+        if duration <= timedelta(0):
+            duration = timedelta(days=1) if all_day else timedelta(hours=1)
+
+        suppressed = self._get_calendar_exdates(event)
+        summary = self._decode_ics_text(event.get("SUMMARY", "Busy"))
+        blocking = self._is_calendar_event_blocking(event)
+        events: list[dict[str, str]] = []
+
+        for occurrence_start in self._iter_calendar_occurrences(
+            start_dt,
+            all_day=all_day,
+            rule=rule,
+            duration=duration,
+            range_start=range_start,
+            range_end=range_end,
+        ):
+            recurrence_key = self._format_calendar_occurrence_key(occurrence_start, all_day)
+            if recurrence_key in suppressed:
+                continue
+            if uid and (uid, recurrence_key) in overrides:
+                continue
+
+            occurrence_end = occurrence_start + duration
+            if occurrence_end <= range_start or occurrence_start >= range_end:
+                continue
+
+            events.append(
+                {
+                    "summary": summary,
+                    "start": occurrence_start.isoformat(timespec="minutes"),
+                    "end": occurrence_end.isoformat(timespec="minutes"),
+                    "all_day": "true" if all_day else "false",
+                    "blocking": "true" if blocking else "false",
+                }
+            )
+
+        return events
+
+    def _get_calendar_datetime_field(
+        self,
+        event: dict[str, str],
+        prefix: str,
+    ) -> tuple[datetime, datetime, bool] | None:
+        start_key = next((key for key in event if key.startswith(prefix)), "")
+        if not start_key:
+            return None
+
+        start_dt, all_day = self._parse_ics_datetime(start_key, event[start_key])
+        if start_dt is None:
+            return None
+
+        end_prefix = "DTEND" if prefix == "DTSTART" else ""
+        end_dt: datetime | None = None
+        if end_prefix:
+            end_key = next((key for key in event if key.startswith(end_prefix)), "")
+            end_value = event.get(end_key, "")
+            if end_value:
+                end_dt, _ = self._parse_ics_datetime(end_key, end_value)
+
+        if end_dt is None:
+            end_dt = start_dt + (timedelta(days=1) if all_day else timedelta(hours=1))
+
+        return start_dt, end_dt, all_day
+
+    def _get_calendar_recurrence_key(self, event: dict[str, str]) -> str:
+        recurrence_key = next((key for key in event if key.startswith("RECURRENCE-ID")), "")
+        if not recurrence_key:
+            return ""
+
+        recurrence_dt, all_day = self._parse_ics_datetime(recurrence_key, event[recurrence_key])
+        if recurrence_dt is None:
+            return ""
+
+        return self._format_calendar_occurrence_key(recurrence_dt, all_day)
+
+    def _format_calendar_occurrence_key(self, occurrence: datetime, all_day: bool) -> str:
+        return occurrence.date().isoformat() if all_day else occurrence.isoformat(timespec="minutes")
+
+    def _parse_calendar_rrule(self, raw_rule: str) -> dict[str, str]:
+        if not raw_rule:
+            return {}
+
+        rule: dict[str, str] = {}
+        for chunk in raw_rule.split(";"):
+            if "=" not in chunk:
+                continue
+            key, value = chunk.split("=", 1)
+            key = key.strip().upper()
+            value = value.strip()
+            if key:
+                rule[key] = value
+        return rule
+
+    def _get_calendar_exdates(self, event: dict[str, str]) -> set[str]:
+        exdates: set[str] = set()
+        for key, raw_value in event.items():
+            if not key.startswith("EXDATE"):
+                continue
+            for group in str(raw_value or "").splitlines():
+                for value in group.split(","):
+                    value = value.strip()
+                    if not value:
+                        continue
+                    parsed, all_day = self._parse_ics_datetime(key, value)
+                    if parsed is None:
+                        continue
+                    exdates.add(self._format_calendar_occurrence_key(parsed, all_day))
+        return exdates
+
+    def _iter_calendar_occurrences(
+        self,
+        start_dt: datetime,
+        *,
+        all_day: bool,
+        rule: dict[str, str],
+        duration: timedelta,
+        range_start: datetime,
+        range_end: datetime,
+    ) -> list[datetime]:
+        frequency = rule.get("FREQ", "").upper()
+        if frequency not in {"DAILY", "WEEKLY", "MONTHLY", "YEARLY"}:
+            return [start_dt]
+
+        until = self._parse_rrule_until(rule.get("UNTIL", ""), all_day)
+        lookback_days = max(1, int(duration.total_seconds() // 86400) + 1)
+        candidate_day = (range_start - timedelta(days=lookback_days)).date()
+        last_day = range_end.date()
+        occurrences: list[datetime] = []
+
+        while candidate_day <= last_day:
+            candidate_dt = datetime.combine(candidate_day, start_dt.time())
+            if all_day:
+                candidate_dt = datetime(candidate_day.year, candidate_day.month, candidate_day.day)
+
+            if candidate_dt >= start_dt and self._matches_calendar_recurrence(
+                start_dt,
+                candidate_dt,
+                rule,
+                frequency=frequency,
+            ):
+                if until is None or candidate_dt <= until:
+                    occurrences.append(candidate_dt)
+            candidate_day += timedelta(days=1)
+
+        return occurrences
+
+    def _matches_calendar_recurrence(
+        self,
+        start_dt: datetime,
+        candidate_dt: datetime,
+        rule: dict[str, str],
+        *,
+        frequency: str,
+    ) -> bool:
+        interval = max(1, self._parse_int(rule.get("INTERVAL", "1"), default=1))
+        byday = self._parse_rrule_byday(rule.get("BYDAY", ""))
+        bymonth = self._parse_rrule_int_list(rule.get("BYMONTH", ""))
+        bymonthday = self._parse_rrule_int_list(rule.get("BYMONTHDAY", ""))
+
+        if frequency == "DAILY":
+            days_apart = (candidate_dt.date() - start_dt.date()).days
+            return days_apart >= 0 and days_apart % interval == 0
+
+        if frequency == "WEEKLY":
+            week_start = WEEKDAY_INDEX.get(rule.get("WKST", "MO").upper(), 0)
+            start_week = start_dt.date() - timedelta(days=(start_dt.weekday() - week_start) % 7)
+            candidate_week = candidate_dt.date() - timedelta(days=(candidate_dt.weekday() - week_start) % 7)
+            weeks_apart = (candidate_week - start_week).days // 7
+            if weeks_apart < 0 or weeks_apart % interval != 0:
+                return False
+            weekdays = {weekday for _, weekday in byday} if byday else {start_dt.weekday()}
+            return candidate_dt.weekday() in weekdays
+
+        if frequency == "MONTHLY":
+            months_apart = (candidate_dt.year - start_dt.year) * 12 + (candidate_dt.month - start_dt.month)
+            if months_apart < 0 or months_apart % interval != 0:
+                return False
+            return self._matches_calendar_month_rules(
+                candidate_dt,
+                start_dt=start_dt,
+                byday=byday,
+                bymonthday=bymonthday,
+            )
+
+        years_apart = candidate_dt.year - start_dt.year
+        if years_apart < 0 or years_apart % interval != 0:
+            return False
+        if bymonth and candidate_dt.month not in bymonth:
+            return False
+        if not bymonth and candidate_dt.month != start_dt.month:
+            return False
+        return self._matches_calendar_month_rules(
+            candidate_dt,
+            start_dt=start_dt,
+            byday=byday,
+            bymonthday=bymonthday,
+        )
+
+    def _matches_calendar_month_rules(
+        self,
+        candidate_dt: datetime,
+        *,
+        start_dt: datetime,
+        byday: list[tuple[int | None, int]],
+        bymonthday: list[int],
+    ) -> bool:
+        if bymonthday:
+            valid_days = {
+                self._resolve_rrule_month_day(candidate_dt.year, candidate_dt.month, month_day)
+                for month_day in bymonthday
+            }
+            return candidate_dt.day in valid_days
+
+        if byday:
+            return any(
+                self._candidate_matches_byday(candidate_dt, ordinal=ordinal, weekday=weekday)
+                for ordinal, weekday in byday
+            )
+
+        return candidate_dt.day == start_dt.day
+
+    def _candidate_matches_byday(
+        self,
+        candidate_dt: datetime,
+        *,
+        ordinal: int | None,
+        weekday: int,
+    ) -> bool:
+        if candidate_dt.weekday() != weekday:
+            return False
+        if ordinal is None:
+            return True
+
+        if ordinal > 0:
+            occurrence_index = ((candidate_dt.day - 1) // 7) + 1
+            return occurrence_index == ordinal
+
+        next_same_weekday = candidate_dt + timedelta(days=7)
+        return next_same_weekday.month != candidate_dt.month and ordinal == -1
+
+    def _resolve_rrule_month_day(self, year: int, month: int, month_day: int) -> int:
+        if month_day > 0:
+            return month_day
+
+        next_month = datetime(year + (month // 12), (month % 12) + 1, 1)
+        last_day = (next_month - timedelta(days=1)).day
+        return last_day + month_day + 1
+
+    def _parse_rrule_until(self, raw_until: str, all_day: bool) -> datetime | None:
+        value = str(raw_until or "").strip()
+        if not value:
+            return None
+
+        if len(value) == 8 and value.isdigit():
+            try:
+                parsed = datetime.strptime(value, "%Y%m%d")
+            except ValueError:
+                return None
+            if not all_day:
+                parsed = parsed.replace(hour=23, minute=59, second=59)
+            return parsed
+
+        parsed, _ = self._parse_ics_datetime("UNTIL", value)
+        return parsed
+
+    def _parse_rrule_byday(self, raw_value: str) -> list[tuple[int | None, int]]:
+        values: list[tuple[int | None, int]] = []
+        for chunk in str(raw_value or "").split(","):
+            token = chunk.strip().upper()
+            if not token:
+                continue
+            match = re.fullmatch(r"([+-]?\d+)?([A-Z]{2})", token)
+            if not match:
+                continue
+            ordinal_raw, weekday_raw = match.groups()
+            weekday = WEEKDAY_INDEX.get(weekday_raw)
+            if weekday is None:
+                continue
+            ordinal = int(ordinal_raw) if ordinal_raw else None
+            values.append((ordinal, weekday))
+        return values
+
+    def _parse_rrule_int_list(self, raw_value: str) -> list[int]:
+        values: list[int] = []
+        for chunk in str(raw_value or "").split(","):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            try:
+                values.append(int(chunk))
+            except ValueError:
+                continue
+        return values
+
+    def _parse_int(self, raw_value: str, *, default: int) -> int:
+        try:
+            return int(str(raw_value).strip())
+        except (TypeError, ValueError):
+            return default
 
     def _is_calendar_event_blocking(self, event: dict[str, str]) -> bool:
         transparency = self._decode_ics_text(event.get("TRANSP", "")).strip().upper()
@@ -1233,12 +1630,124 @@ class TodoStore:
         return formatdate(self.db_file.stat().st_mtime, usegmt=True)
 
 
+class SessionAuth:
+    cookie_name = "todo_board_session"
+
+    def __init__(
+        self,
+        *,
+        enabled: bool,
+        username: str,
+        password: str,
+        session_secret: str,
+        session_ttl_seconds: int,
+    ) -> None:
+        self.enabled = bool(enabled)
+        self.username = username.strip() or "admin"
+        self.password = password
+        self.session_ttl_seconds = max(300, int(session_ttl_seconds))
+        self._secret = hashlib.sha256(session_secret.encode("utf-8")).digest()
+
+        if self.enabled and not self.password:
+            raise ValueError("TODO_PASSWORD must be set when authentication is enabled")
+
+    @classmethod
+    def from_env(cls) -> "SessionAuth":
+        password = os.getenv("TODO_PASSWORD", "")
+        auth_enabled_raw = os.getenv("TODO_AUTH_ENABLED")
+        enabled = (
+            password != ""
+            if auth_enabled_raw is None
+            else auth_enabled_raw.strip().lower() in {"1", "true", "yes", "on"}
+        )
+        username = os.getenv("TODO_USERNAME", "admin").strip() or "admin"
+        secret = os.getenv("TODO_SESSION_SECRET", "") or f"{username}:{password}:task-atlas"
+
+        try:
+            ttl_hours = max(1, int(os.getenv("TODO_SESSION_TTL_HOURS", "168")))
+        except ValueError:
+            ttl_hours = 168
+
+        return cls(
+            enabled=enabled,
+            username=username,
+            password=password,
+            session_secret=secret,
+            session_ttl_seconds=ttl_hours * 3600,
+        )
+
+    def authenticate(self, username: str, password: str) -> bool:
+        if not self.enabled:
+            return True
+        return (
+            secrets.compare_digest(username.strip(), self.username)
+            and secrets.compare_digest(password, self.password)
+        )
+
+    def issue_session_token(self) -> str:
+        expires_at = int(time.time()) + self.session_ttl_seconds
+        payload = f"{self.username}:{expires_at}".encode("utf-8")
+        signature = hmac.new(self._secret, payload, hashlib.sha256).digest()
+        encoded_signature = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+        return f"{expires_at}.{encoded_signature}"
+
+    def is_valid_session_token(self, token: str) -> bool:
+        if not self.enabled:
+            return True
+
+        try:
+            expires_raw, supplied_signature = token.split(".", 1)
+            expires_at = int(expires_raw)
+        except (TypeError, ValueError):
+            return False
+
+        if expires_at <= int(time.time()):
+            return False
+
+        payload = f"{self.username}:{expires_at}".encode("utf-8")
+        expected_signature = hmac.new(self._secret, payload, hashlib.sha256).digest()
+        expected_encoded = base64.urlsafe_b64encode(expected_signature).decode("ascii").rstrip("=")
+        return secrets.compare_digest(supplied_signature, expected_encoded)
+
+    def build_cookie_header(self, value: str, *, secure: bool, max_age: int | None = None) -> str:
+        parts = [
+            f"{self.cookie_name}={value}",
+            "HttpOnly",
+            "Path=/",
+            "SameSite=Lax",
+        ]
+        if max_age is not None:
+            parts.append(f"Max-Age={max_age}")
+        if secure:
+            parts.append("Secure")
+        return "; ".join(parts)
+
+
 class TodoRequestHandler(SimpleHTTPRequestHandler):
-    def __init__(self, *args, directory: str, store: TodoStore, **kwargs):
+    def __init__(
+        self,
+        *args,
+        directory: str,
+        store: TodoStore,
+        auth: SessionAuth,
+        **kwargs,
+    ):
         self.store = store
+        self.auth = auth
         super().__init__(*args, directory=directory, **kwargs)
 
     def do_GET(self) -> None:
+        if self._is_health_endpoint():
+            self._serve_health(include_body=True)
+            return
+        if self._is_session_endpoint():
+            self._serve_session(include_body=True)
+            return
+        if self._is_login_page() and self._is_authenticated():
+            self._redirect_authenticated_user()
+            return
+        if not self._authorize_request():
+            return
         if self._is_state_endpoint():
             self._serve_state(include_body=True)
             return
@@ -1255,6 +1764,14 @@ class TodoRequestHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_HEAD(self) -> None:
+        if self._is_health_endpoint():
+            self._serve_health(include_body=False)
+            return
+        if self._is_session_endpoint():
+            self._serve_session(include_body=False)
+            return
+        if not self._authorize_request():
+            return
         if self._is_state_endpoint():
             self._serve_state(include_body=False)
             return
@@ -1271,6 +1788,55 @@ class TodoRequestHandler(SimpleHTTPRequestHandler):
         super().do_HEAD()
 
     def do_POST(self) -> None:
+        if self._is_session_login_endpoint():
+            payload = self._read_json_body()
+            if payload is None:
+                return
+
+            username = str(payload.get("username", "")).strip()
+            password = str(payload.get("password", ""))
+            if not self.auth.authenticate(username, password):
+                self._send_json_error(
+                    HTTPStatus.UNAUTHORIZED,
+                    "Invalid username or password",
+                )
+                return
+
+            response_payload = {
+                "ok": True,
+                "authenticated": True,
+                "auth_enabled": self.auth.enabled,
+                "username": self.auth.username,
+            }
+            self._send_json(
+                HTTPStatus.OK,
+                response_payload,
+                extra_headers={
+                    "Set-Cookie": self.auth.build_cookie_header(
+                        self.auth.issue_session_token(),
+                        secure=self._request_is_secure(),
+                        max_age=self.auth.session_ttl_seconds,
+                    )
+                },
+            )
+            return
+
+        if self._is_session_logout_endpoint():
+            self.send_response(HTTPStatus.NO_CONTENT)
+            self.send_header(
+                "Set-Cookie",
+                self.auth.build_cookie_header(
+                    "",
+                    secure=self._request_is_secure(),
+                    max_age=0,
+                ),
+            )
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+
+        if not self._authorize_request():
+            return
         if not self._is_tasks_collection_endpoint():
             self.send_error(HTTPStatus.NOT_FOUND, "Unknown API endpoint")
             return
@@ -1288,6 +1854,8 @@ class TodoRequestHandler(SimpleHTTPRequestHandler):
         self._send_json(HTTPStatus.CREATED, created)
 
     def do_PUT(self) -> None:
+        if not self._authorize_request():
+            return
         if self._is_calendar_feed_endpoint():
             payload = self._read_json_body()
             if payload is None:
@@ -1327,13 +1895,20 @@ class TodoRequestHandler(SimpleHTTPRequestHandler):
             self.send_error(HTTPStatus.BAD_REQUEST, "Expected pages array")
             return
 
-        self.store.replace_state(tasks, teams, goals, pages)
+        settings = payload.get("settings")
+        if settings is not None and not isinstance(settings, dict):
+            self.send_error(HTTPStatus.BAD_REQUEST, "Expected settings object")
+            return
+
+        self.store.replace_state(tasks, teams, goals, pages, settings)
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Last-Modified", self.store.last_modified())
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
 
     def do_PATCH(self) -> None:
+        if not self._authorize_request():
+            return
         task_id = self._task_id_from_path()
         if task_id is None:
             self.send_error(HTTPStatus.NOT_FOUND, "Unknown API endpoint")
@@ -1356,6 +1931,8 @@ class TodoRequestHandler(SimpleHTTPRequestHandler):
         self._send_json(HTTPStatus.OK, updated)
 
     def do_DELETE(self) -> None:
+        if not self._authorize_request():
+            return
         task_id = self._task_id_from_path()
         if task_id is None:
             self.send_error(HTTPStatus.NOT_FOUND, "Unknown API endpoint")
@@ -1373,7 +1950,100 @@ class TodoRequestHandler(SimpleHTTPRequestHandler):
 
     def end_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Vary", "Cookie")
         super().end_headers()
+
+    def _authorize_request(self) -> bool:
+        if not self.auth.enabled:
+            return True
+
+        path = self._request_path()
+        if self._is_public_path(path):
+            return True
+
+        if self._is_authenticated():
+            return True
+
+        if self._is_api_path(path):
+            self._send_json_error(HTTPStatus.UNAUTHORIZED, "Authentication required")
+            return False
+
+        self._redirect_to_login()
+        return False
+
+    def _request_path(self) -> str:
+        return urlparse(self.path).path
+
+    def _is_authenticated(self) -> bool:
+        if not self.auth.enabled:
+            return True
+
+        token = self._session_token_from_request()
+        return self.auth.is_valid_session_token(token)
+
+    def _session_token_from_request(self) -> str:
+        cookie_header = self.headers.get("Cookie", "")
+        if not cookie_header:
+            return ""
+
+        cookie = SimpleCookie()
+        cookie.load(cookie_header)
+        morsel = cookie.get(self.auth.cookie_name)
+        return morsel.value if morsel is not None else ""
+
+    def _request_is_secure(self) -> bool:
+        forwarded_proto = self.headers.get("X-Forwarded-Proto", "").lower()
+        if forwarded_proto:
+            return forwarded_proto.split(",")[0].strip() == "https"
+
+        forwarded_ssl = self.headers.get("X-Forwarded-SSL", "").lower()
+        if forwarded_ssl == "on":
+            return True
+
+        forwarded = self.headers.get("Forwarded", "").lower()
+        if "proto=https" in forwarded:
+            return True
+
+        return False
+
+    def _is_public_path(self, path: str) -> bool:
+        return (
+            path in {
+                "/favicon.ico",
+                "/healthz",
+                "/login.html",
+                "/api/session",
+                "/api/session/login",
+                "/api/session/logout",
+            }
+            or path.startswith("/assets/")
+        )
+
+    def _is_api_path(self, path: str) -> bool:
+        return path.startswith("/api/")
+
+    def _login_redirect_target(self) -> str:
+        raw_next = parse_qs(urlparse(self.path).query).get("next", ["/index.html"])[0]
+        if not isinstance(raw_next, str) or not raw_next.startswith("/") or raw_next.startswith("//"):
+            return "/index.html"
+        return raw_next
+
+    def _redirect_authenticated_user(self) -> None:
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self.send_header("Location", self._login_redirect_target())
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+    def _redirect_to_login(self) -> None:
+        current = self._request_path()
+        parsed = urlparse(self.path)
+        if parsed.query:
+            current = f"{current}?{parsed.query}"
+        location = f"/login.html?next={quote(current, safe='/=?&')}"
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self.send_header("Location", location)
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
 
     def _is_state_endpoint(self) -> bool:
         return urlparse(self.path).path == "/api/state"
@@ -1386,6 +2056,21 @@ class TodoRequestHandler(SimpleHTTPRequestHandler):
 
     def _is_calendar_feed_endpoint(self) -> bool:
         return urlparse(self.path).path == "/api/calendar-feed"
+
+    def _is_session_endpoint(self) -> bool:
+        return urlparse(self.path).path == "/api/session"
+
+    def _is_session_login_endpoint(self) -> bool:
+        return urlparse(self.path).path == "/api/session/login"
+
+    def _is_session_logout_endpoint(self) -> bool:
+        return urlparse(self.path).path == "/api/session/logout"
+
+    def _is_health_endpoint(self) -> bool:
+        return urlparse(self.path).path == "/healthz"
+
+    def _is_login_page(self) -> bool:
+        return self._request_path() == "/login.html"
 
     def _task_id_from_path(self) -> int | None:
         path = urlparse(self.path).path
@@ -1421,15 +2106,55 @@ class TodoRequestHandler(SimpleHTTPRequestHandler):
 
         return payload
 
-    def _send_json(self, status: HTTPStatus, payload: dict[str, Any] | list[dict[str, Any]]) -> None:
+    def _send_json(
+        self,
+        status: HTTPStatus,
+        payload: dict[str, Any] | list[dict[str, Any]],
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Last-Modified", self.store.last_modified())
         self.send_header("Cache-Control", "no-store")
+        for header_name, header_value in (extra_headers or {}).items():
+            self.send_header(header_name, header_value)
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_json_error(self, status: HTTPStatus, message: str) -> None:
+        self._send_json(status, {"error": message})
+
+    def _serve_health(self, *, include_body: bool) -> None:
+        payload = json.dumps({"ok": True}).encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+        if include_body:
+            self.wfile.write(payload)
+
+    def _serve_session(self, *, include_body: bool) -> None:
+        authenticated = self._is_authenticated()
+        payload = json.dumps(
+            {
+                "auth_enabled": self.auth.enabled,
+                "authenticated": authenticated,
+                "username": self.auth.username if authenticated else "",
+            }
+        ).encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+        if include_body:
+            self.wfile.write(payload)
 
     def _serve_state(self, *, include_body: bool) -> None:
         payload = json.dumps(
@@ -1569,12 +2294,22 @@ def parse_csv_tasks(raw_csv: str) -> list[dict[str, Any]]:
 
 
 def parse_args() -> argparse.Namespace:
+    root_dir = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description="Serve the todo board with a SQLite-backed API.")
-    parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--site-dir", required=True)
-    parser.add_argument("--db-file", required=True)
-    parser.add_argument("--seed-csv")
+    parser.add_argument("--host", default=os.getenv("HOST", "0.0.0.0"))
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")))
+    parser.add_argument(
+        "--site-dir",
+        default=os.getenv("TODO_SITE_DIR", str(root_dir / "site")),
+    )
+    parser.add_argument(
+        "--db-file",
+        default=os.getenv("TODO_DB_FILE", str(root_dir / "data" / "tasks.db")),
+    )
+    parser.add_argument(
+        "--seed-csv",
+        default=os.getenv("TODO_SEED_CSV", str(root_dir / "data" / "tasks.csv")),
+    )
     parser.add_argument("--init-only", action="store_true")
     return parser.parse_args()
 
@@ -1582,6 +2317,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     store = TodoStore(args.db_file)
+    auth = SessionAuth.from_env()
     imported = store.import_csv_once(args.seed_csv)
 
     if imported:
@@ -1595,6 +2331,7 @@ def main() -> None:
         TodoRequestHandler,
         directory=args.site_dir,
         store=store,
+        auth=auth,
     )
     server = ThreadingHTTPServer((args.host, args.port), handler)
     print(f"Serving site from {args.site_dir}")
