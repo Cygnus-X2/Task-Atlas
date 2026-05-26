@@ -10,7 +10,19 @@ Small local task board with:
 
 The frontend edits tasks through a local API instead of storing data in the browser.
 
-## Run
+## Local Setup
+
+Use the local macOS setup first. That is the main path currently in use. Server-side deployment exists, but it is not the tested/default path yet.
+
+### One-time host entry
+
+Add this once to `/etc/hosts` so the app is available as `todo.nik`:
+
+```bash
+echo '127.0.0.1 todo.nik' | sudo tee -a /etc/hosts
+```
+
+### Quick local run without a service
 
 Start on a non-privileged port:
 
@@ -31,6 +43,81 @@ http://127.0.0.1:8000
 ```
 
 If you omit the port, the script defaults to `80`.
+
+### Local service with `launchd`
+
+This is the recommended local setup on macOS.
+
+Use port `8000` and open `http://todo.nik:8000`.
+
+Install these user agents:
+
+```bash
+cp launchd/com.nik.todo-board.server.user.plist ~/Library/LaunchAgents/
+cp launchd/com.nik.todo-board.open-browser.plist ~/Library/LaunchAgents/
+launchctl load -w ~/Library/LaunchAgents/com.nik.todo-board.server.user.plist
+launchctl load -w ~/Library/LaunchAgents/com.nik.todo-board.open-browser.plist
+```
+
+This will:
+
+- start the server at login
+- keep it running
+- open the browser to `http://todo.nik:8000`
+
+### Local service directly on port `80`
+
+If you want exactly `http://todo.nik` without a port, use the root `launchd` daemon.
+
+Because port `80` is privileged on macOS, the server must run as a root daemon instead of a user agent:
+
+```bash
+sudo cp launchd/com.nik.todo-board.server.root.plist /Library/LaunchDaemons/
+sudo launchctl load -w /Library/LaunchDaemons/com.nik.todo-board.server.root.plist
+```
+
+Then open:
+
+```text
+http://todo.nik
+```
+
+If you also want the browser to open automatically at login, still install:
+
+```bash
+cp launchd/com.nik.todo-board.open-browser.plist ~/Library/LaunchAgents/
+launchctl load -w ~/Library/LaunchAgents/com.nik.todo-board.open-browser.plist
+```
+
+If you use the root daemon on port `80`, change the URL inside `launchd/com.nik.todo-board.open-browser.plist` from `http://todo.nik:8000` to `http://todo.nik`.
+
+## Restart The Service
+
+If you are using the root `launchd` daemon on port `80`, restart it with:
+
+```bash
+sudo launchctl unload -w /Library/LaunchDaemons/com.nik.todo-board.server.root.plist
+sudo launchctl load -w /Library/LaunchDaemons/com.nik.todo-board.server.root.plist
+```
+
+If you are using the user-level service on port `8000`, restart it with:
+
+```bash
+launchctl unload -w ~/Library/LaunchAgents/com.nik.todo-board.server.user.plist
+launchctl load -w ~/Library/LaunchAgents/com.nik.todo-board.server.user.plist
+```
+
+Verify it after restart:
+
+```bash
+sudo launchctl print system/com.nik.todo-board.server.root
+curl -I http://todo.nik
+```
+
+Practical rule:
+
+- if you changed files in `site/` only, usually just refresh the browser
+- if you changed `scripts/todo_server.py`, `scripts/start-todo.sh`, or the daemon plist, restart the service
 
 ## Login / Auth
 
@@ -59,7 +146,9 @@ When auth is enabled:
 
 ## Docker / Web Deploy
 
-The app now ships with a `Dockerfile`, so the easiest deployment path is any host that can run a single Docker container plus a persistent volume for SQLite.
+This exists, but it is not the deployment path that has been tested most thoroughly yet. Prefer the local `launchd` setup above first.
+
+The app ships with a `Dockerfile`, so the easiest deployment path is any host that can run a single Docker container plus a persistent volume for SQLite.
 
 Build locally:
 
@@ -103,85 +192,6 @@ TODO_PASSWORD=...
 TODO_SESSION_SECRET=...
 TODO_SESSION_TTL_HOURS=168
 ```
-
-## Restart The Service
-
-If you are using the root `launchd` daemon on port `80`, restart it with:
-
-```bash
-sudo launchctl unload -w /Library/LaunchDaemons/com.nik.todo-board.server.root.plist
-sudo launchctl load -w /Library/LaunchDaemons/com.nik.todo-board.server.root.plist
-```
-
-Verify it after restart:
-
-```bash
-sudo launchctl print system/com.nik.todo-board.server.root
-curl -I http://todo.nik
-```
-
-Practical rule:
-
-- if you changed files in `site/` only, usually just refresh the browser
-- if you changed `scripts/todo_server.py`, `scripts/start-todo.sh`, or the daemon plist, restart the daemon
-
-## Start At Login
-
-For macOS, the simplest setup is:
-
-1. map `todo.nik` to localhost once
-2. run the server with `launchd`
-3. optionally open the browser automatically at login
-
-Add this once to `/etc/hosts`:
-
-```bash
-echo '127.0.0.1 todo.nik' | sudo tee -a /etc/hosts
-```
-
-### Easiest setup
-
-Use port `8000` and open `http://todo.nik:8000`.
-
-Install these user agents:
-
-```bash
-cp launchd/com.nik.todo-board.server.user.plist ~/Library/LaunchAgents/
-cp launchd/com.nik.todo-board.open-browser.plist ~/Library/LaunchAgents/
-launchctl load -w ~/Library/LaunchAgents/com.nik.todo-board.server.user.plist
-launchctl load -w ~/Library/LaunchAgents/com.nik.todo-board.open-browser.plist
-```
-
-This will:
-
-- start the server at login
-- keep it running
-- open the browser to `http://todo.nik:8000`
-
-### Clean `todo.nik` without a port
-
-If you want exactly `http://todo.nik`, the server must run on port `80`.
-Because port `80` is privileged on macOS, use a root daemon instead of a user agent:
-
-```bash
-sudo cp launchd/com.nik.todo-board.server.root.plist /Library/LaunchDaemons/
-sudo launchctl load -w /Library/LaunchDaemons/com.nik.todo-board.server.root.plist
-```
-
-Then you can open:
-
-```text
-http://todo.nik
-```
-
-If you also want the browser to open automatically at login, still install:
-
-```bash
-cp launchd/com.nik.todo-board.open-browser.plist ~/Library/LaunchAgents/
-launchctl load -w ~/Library/LaunchAgents/com.nik.todo-board.open-browser.plist
-```
-
-If you use the root daemon on port `80`, change the URL inside `launchd/com.nik.todo-board.open-browser.plist` from `http://todo.nik:8000` to `http://todo.nik`.
 
 ## Data Storage
 
