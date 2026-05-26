@@ -1,3 +1,4 @@
 # Keep local/private skills out of the public repo.
 data/*-SKILL.md
 data/*.db
+data/first-90-days-niklas.html
